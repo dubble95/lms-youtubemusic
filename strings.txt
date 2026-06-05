@@ -1,0 +1,51 @@
+PLUGIN_YOUTUBEMUSIC
+	EN	YouTube Music
+	KO	YouTube Music
+
+PLUGIN_YOUTUBEMUSIC_DESC
+	EN	Configure your YouTube Music plugin settings.
+	KO	YouTube Music 플러그인 설정을 구성합니다.
+
+PLUGIN_YOUTUBEMUSIC_COOKIE_DESC
+	EN	Enter your YouTube Music Cookie here. You can find this using your browser's developer tools on music.youtube.com.
+	KO	YouTube Music 쿠키를 여기에 입력하세요. 브라우저의 개발자 도구를 사용하여 music.youtube.com에서 찾을 수 있습니다.
+
+AUTH_COOKIE
+	EN	Cookie Authentication
+	KO	쿠키 인증
+
+AUTH_OAUTH2
+	EN	OAuth2 Authentication (YouTube on TV)
+	KO	OAuth2 인증 (YouTube on TV)
+
+AUTH_OAUTH2_DESC
+	EN	Authenticate using Google's device pairing.
+	KO	Google 기기 페어링을 사용하여 인증합니다.
+
+AUTH_OAUTH2_GET_CODE
+	EN	Get Activation Code
+	KO	활성화 코드 받기
+
+AUTH_OAUTH2_CONNECTED
+	EN	Connected to YouTube Music
+	KO	YouTube Music에 연결됨
+
+AUTH_OAUTH2_CLEAR
+	EN	Disconnect
+	KO	연결 해제
+
+AUTH_OAUTH2_INSTRUCTIONS
+	EN	Go to the link below and enter this code:
+	KO	아래 링크로 이동하여 다음 코드를 입력하세요:
+
+AUTH_OAUTH2_LINK
+	EN	Google Activation Page
+	KO	Google 활성화 페이지
+
+AUTH_OAUTH2_DONE
+	EN	I have entered the code
+	KO	코드를 입력했습니다
+
+AUTH_OAUTH2_REFRESH
+	EN	Refresh Token
+	KO	토큰 갱신

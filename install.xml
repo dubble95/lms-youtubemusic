@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extensions>
+  <name>YouTube Music</name>
+  <id>YouTubeMusic</id>
+  <version>1.0.0</version>
+  <module>Plugins::YouTubeMusic::Plugin</module>
+  <description>Play YouTube Music in Lyrion Music Server.</description>
+  <creator>Gemini CLI</creator>
+  <email></email>
+  <homepage></homepage>
+  <optionsURL>plugins/YouTubeMusic/settings/basic.html</optionsURL>
+  <targetApplication>
+    <maxVersion>*</maxVersion>
+    <minVersion>8.0</minVersion>
+  </targetApplication>
+</extensions>
