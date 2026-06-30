@@ -4,34 +4,6 @@
     [% WRAPPER settingGroup title="AUTH_COOKIE" desc="PLUGIN_YOUTUBEMUSIC_COOKIE_DESC" %]
         <textarea name="pref_cookie" id="pref_cookie" rows="5" cols="60" class="stdedit">[% pref_cookie %]</textarea>
     [% END %]
-
-    [% WRAPPER settingGroup title="AUTH_OAUTH2" desc="AUTH_OAUTH2_DESC" %]
-        <div style="margin-bottom: 10px;">
-            [% IF access_token %]
-                <span style="color: green; font-weight: bold;">[% "AUTH_OAUTH2_CONNECTED" | string %]</span>
-                <input type="submit" name="clear_token" value="[% "AUTH_OAUTH2_CLEAR" | string %]" class="stdedit">
-            [% ELSE %]
-                <input type="submit" name="get_code" value="[% "AUTH_OAUTH2_GET_CODE" | string %]" class="stdedit">
-            [% END %]
-        </div>
-        
-        [% IF user_code %]
-            <div style="border: 1px solid #ccc; padding: 15px; background-color: #f9f9f9; border-radius: 5px;">
-                <p>[% "AUTH_OAUTH2_INSTRUCTIONS" | string %]</p>
-                <div style="font-size: 2em; font-weight: bold; margin: 15px 0; color: #000; letter-spacing: 2px;">[% user_code %]</div>
-                <p><a href="[% authorize_link %]" target="_blank" style="text-decoration: underline; color: blue;">[% "AUTH_OAUTH2_LINK" | string %]</a></p>
-                <div style="margin-top: 15px;">
-                    <input type="submit" name="refresh" value="[% "AUTH_OAUTH2_DONE" | string %]" class="stdedit">
-                </div>
-            </div>
-        [% END %]
-        
-        [% IF refresh_token %]
-            <div style="margin-top: 10px;">
-                <input type="submit" name="refresh" value="[% "AUTH_OAUTH2_REFRESH" | string %]" class="stdedit">
-            </div>
-        [% END %]
-    [% END %]
 [% END %]
 
 [% PROCESS settings/footer.html %]

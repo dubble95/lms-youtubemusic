@@ -7,8 +7,8 @@ PLUGIN_YOUTUBEMUSIC_DESC
 	KO	YouTube Music 플러그인 설정을 구성합니다.
 
 PLUGIN_YOUTUBEMUSIC_COOKIE_DESC
-	EN	Enter your YouTube Music Cookie here. You can find this using your browser's developer tools on music.youtube.com.
-	KO	YouTube Music 쿠키를 여기에 입력하세요. 브라우저의 개발자 도구를 사용하여 music.youtube.com에서 찾을 수 있습니다.
+	EN	Enter your YouTube Music Cookie. (Note: Copying the ENTIRE Cookie header, including SID/HSID/SSID/SAPISID/__Secure-3PSID, will keep the session valid for up to 2 years.)
+	KO	YouTube Music 쿠키를 입력하세요. (주의: 임시 토큰만 복사하면 24시간 내에 만료되지만, 개발자도구에서 SID/HSID/SSID/SAPISID/__Secure-3PSID 등이 포함된 전체 Cookie 헤더 문자열을 복사해 넣으시면 최대 2년간 갱신 없이 정상 동작합니다.)
 
 AUTH_COOKIE
 	EN	Cookie Authentication
