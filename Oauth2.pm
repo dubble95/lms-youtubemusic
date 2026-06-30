@@ -56,7 +56,24 @@ sub getToken {
                     }
                 } else {
                     $cache->set("ytm:access_token", $result->{access_token}, $result->{expires_in} - 60);
-                    $prefs->set('refresh_token', $result->{refresh_token}) if $result->{refresh_token};
+                    if ($result->{refresh_token}) {
+                        $prefs->set('refresh_token', $result->{refresh_token});
+                        
+                        # Dynamically write/update ytmusicapi_oauth.json
+                        my $oauth_file = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json';
+                        my $json = sprintf(
+                            '{"client_id": "%s", "client_secret": "%s", "refresh_token": "%s", "grant_type": "refresh_token"}',
+                            $CLIENT_ID, $CLIENT_SECRET, $result->{refresh_token}
+                        );
+                        if (open(my $fh, '>', $oauth_file)) {
+                            print $fh $json;
+                            close($fh);
+                            chmod(0664, $oauth_file);
+                            $log->warn("ytmusicapi_oauth.json file written successfully via settings OAuth2 flow");
+                        } else {
+                            $log->error("Failed to write ytmusicapi_oauth.json: $!");
+                        }
+                    }
                     
                     $cache->remove('ytm:user_code');
                     $cache->remove('ytm:verification_url');

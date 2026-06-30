@@ -16,6 +16,8 @@ sub name { return 'PLUGIN_YOUTUBEMUSIC' }
 sub page { return 'plugins/YouTubeMusic/settings/basic.html' }
 sub prefs { return ($prefs, qw(cookie)) }
 
+require Plugins::YouTubeMusic::Oauth2;
+
 sub handler {
     my ($class, $client, $params, $callback, @args) = @_;
 
@@ -30,6 +32,29 @@ sub handler {
             _regenerate_ytmusicapi_auth($cookie);
         }
     }
+
+    # Handle OAuth2 Device Flow actions from settings Web UI
+    if ($params->{get_code}) {
+        $log->warn("OAuth2 get_code requested via Settings UI");
+        Plugins::YouTubeMusic::Oauth2::getCode();
+    }
+    if ($params->{clear_token}) {
+        $log->warn("OAuth2 clear_token requested via Settings UI");
+        $cache->remove('ytm:access_token');
+        $prefs->remove('refresh_token');
+        unlink('/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json');
+    }
+    if ($params->{refresh}) {
+        $log->warn("OAuth2 getToken/refresh requested via Settings UI");
+        Plugins::YouTubeMusic::Oauth2::getToken();
+    }
+
+    # Set parameters for template rendering in basic.html
+    $params->{user_code}        = $cache->get('ytm:user_code');
+    $params->{verification_url} = $cache->get('ytm:verification_url');
+    $params->{authorize_link}   = $cache->get('ytm:verification_url');
+    $params->{access_token}     = $cache->get('ytm:access_token');
+    $params->{refresh_token}    = $prefs->get('refresh_token');
 
     $callback->($client, $params, $class->SUPER::handler($client, $params), @args);
 }
