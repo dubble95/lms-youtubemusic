@@ -1,121 +1,271 @@
 package Plugins::YouTubeMusic::ProtocolHandler;
 
 use strict;
-use base qw(Slim::Player::Protocols::HTTP);
+use base qw(Slim::Player::Protocols::HTTPS);
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Plugins::YouTubeMusic::Utils;
-use JSON::XS;
+use JSON::XS::VersionOneAndTwo;
 use AnyEvent::Util;
 
-my $log = Slim::Utils::Log::logger('plugin.youtubemusic');
+my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 
 # Register the protocol handler
 Slim::Player::ProtocolHandlers->registerHandler('ytmusic', __PACKAGE__);
 
+sub isRemote         { return 1; }
+sub contentType      { return 'aac'; }  # fallback, overridden per-track
+sub getFormatForURL  { return 'aac'; }  # tells LMS to treat as audio stream
+
+sub new {
+    my ($class, $args) = @_;
+    my $song = $args->{song};
+    
+    my $url = $song->pluginData('url');
+    if ($url) {
+        $args->{url} = $url;
+        $log->info("Redirecting RemoteStream URL to: $url");
+    }
+    
+    return $class->SUPER::new($args);
+}
+
+sub formatOverride {
+    my ($class, $song) = @_;
+    my $meta = $song->pluginData('metadata') || {};
+    return $meta->{type} || 'aac';
+}
+
 sub canDirectStream {
-    return 0; # We'll use transcoding/proxying via HTTP redirect for now or custom stream
+    my ($class, $client, $url) = @_;
+    $log->warn("canDirectStream checked for url: $url - returning 0");
+    return 0;
+}
+
+sub canDirectStreamSong {
+    my ($class, $client, $song) = @_;
+    $log->warn("canDirectStreamSong checked - returning 0");
+    return 0;
+}
+
+sub forceTranscode {
+    my ($class, $client, $format) = @_;
+    $log->warn("forceTranscode checked for format: $format - returning 1");
+    return 1;
+}
+
+# Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
+# to fetch ytmusic:// as an HTTP URL. Just pass the track back immediately.
+sub scanUrl {
+    my ($class, $url, $args) = @_;
+    my $cb = $args->{cb} or return;
+    
+    my $track = Slim::Schema->objectForUrl($url) || Slim::Schema->updateOrCreate({
+        url => $url,
+    });
+    
+    $cb->($track, undef, @{$args->{passthrough} || []});
 }
 
 sub getNextTrack {
-	my ($class, $song, $successCb, $errorCb) = @_;
+    my ($class, $song, $successCb, $errorCb) = @_;
 
-	my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
-	if (!$yt_dlp) {
+    my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
+    if (!$yt_dlp) {
+        $log->error("Cannot find yt-dlp binary");
         $errorCb->("cannot find yt-dlp");
         return;
     }
 
-	my $url = $song->track()->url;
+    $log->info("Using yt-dlp: $yt_dlp");
+
+    my $url = $song->track()->url;
     my ($id) = $url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
-    
+
     if (!$id) {
-        $errorCb->("invalid ytmusic ID");
+        $errorCb->("invalid ytmusic ID from URL: $url");
         return;
     }
 
-	my $yt_url = "https://music.youtube.com/watch?v=$id";
-    
-    $log->info("Getting track info for $id");
+    my $yt_url = "https://music.youtube.com/watch?v=$id";
+    $log->info("Getting track info for: $yt_url");
+
+    # Build yt-dlp command
+    my @cmd = ($yt_dlp, '--no-warnings', '--quiet', '--extractor-args', 'youtube:player_client=web,default', '-j', $yt_url);
+
+    # Pass cookie directly as HTTP header — more reliable than Netscape cookie file format
+    my $cookie_str = $prefs->get('cookie');
+    if ($cookie_str) {
+        push @cmd, '--add-header', "Cookie:$cookie_str";
+        $log->info("Passing cookie via --add-header (length: " . length($cookie_str) . ")");
+    }
 
     my $cv = AnyEvent::Util::run_cmd(
-        [ $yt_dlp, '-j', $yt_url],
-        "<", "/dev/null",
-        ">" , \my $tracks_json,
+        \@cmd,
+        "<",  "/dev/null",
+        ">",  \my $tracks_json,
         "2>", \my $err,
     );
 
-    $cv->cb( sub {
-        my $tracks = eval { decode_json($tracks_json) };
+    $cv->cb(sub {
+        # Strip any non-JSON lines before the actual JSON (e.g. yt-dlp deprecation warnings)
+        my $json_str = $tracks_json // '';
+        if ($json_str =~ /^(.*?)(\{.+)$/s) {
+            $json_str = $2;  # Take only from first '{'
+        }
+
+        my $tracks = eval { decode_json($json_str) };
 
         if ($@ || !$tracks) {
-            $log->error("yt-dlp failed: $err");
-            $errorCb->($@ || "yt-dlp failed");
+            $log->error("yt-dlp failed for $id: $err");
+            $log->error("yt-dlp stdout was: " . substr($tracks_json || '', 0, 200));
+            $errorCb->($@ || "yt-dlp failed: $err");
             return;
         }
 
-        # duration is in seconds
-        $song->track->secs( $tracks->{'duration'} );
-        
-        # Store metadata for getMetadata
+        # Store metadata
         $song->pluginData(metadata => {
             title    => $tracks->{title},
-            artist   => $tracks->{uploader} || $tracks->{artist},
+            artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
             album    => $tracks->{album},
             duration => $tracks->{duration},
             image    => $tracks->{thumbnail},
         });
-        
+
+        # Set track duration
+        $song->track->secs($tracks->{duration}) if $tracks->{duration};
+
         # Select best audio format
-        my $stream_url = _selectBestAudio($tracks->{formats});
-        
-        if (!$stream_url) {
-            $errorCb->("No suitable audio stream found");
+        # Must have: vcodec=none, real acodec (not 'none'), real ext (not 'mhtml'), and a URL
+        my $formats = $tracks->{formats} || [];
+        my @audio_formats = grep {
+            my $f = $_;
+            ($f->{vcodec} || '') eq 'none'
+            && $f->{acodec} && $f->{acodec} ne 'none'
+            && ($f->{ext} || '') ne 'mhtml'
+            && $f->{url}
+        } @$formats;
+
+        if (!@audio_formats) {
+            $log->error("No audio-only formats found for $id, trying any format with audio");
+            # Fallback: any format that has an audio codec and URL
+            @audio_formats = grep { $_->{acodec} && $_->{acodec} ne 'none' && $_->{url} } @$formats;
+        }
+
+        if (!@audio_formats) {
+            $errorCb->("No suitable audio stream found for $id");
             return;
         }
 
-        $log->info("Stream URL found: $stream_url");
-        
-        # In a real implementation, we might need to handle expiration and signatures
-        # For now, we'll try to just pass the URL
-        $song->pluginData(url => $stream_url);
-        
+        # Sort by preference: opus/webm (251) > m4a (140) > then by bitrate
+        my @sorted = sort {
+            my $a_score = _formatScore($a);
+            my $b_score = _formatScore($b);
+            $b_score <=> $a_score;
+        } @audio_formats;
+
+        my $best = $sorted[0];
+
+        $log->info(sprintf("Selected format %s (%s, %skbps) for %s",
+            $best->{format_id} // '?',
+            $best->{ext}       // '?',
+            $best->{abr}       // '?',
+            $id));
+
+        # Update metadata with codec info
+        my $meta = $song->pluginData('metadata') || {};
+        $meta->{type}    = 'aac';
+        $meta->{bitrate} = ($best->{abr} || 0) * 1000;
+        $song->pluginData(metadata => $meta);
+
+        $song->pluginData(url => $best->{url});
         $successCb->();
     });
 }
 
-sub _selectBestAudio {
-    my $formats = shift;
-    
-    # Simple selection: find highest bitrate m4a/opus
-    my $best_format;
-    for my $f (@$formats) {
-        next unless $f->{vcodec} eq 'none'; # audio only
-        
-        if (!$best_format || $f->{abr} > $best_format->{abr}) {
-            $best_format = $f;
-        }
-    }
-    
-    return $best_format->{url} if $best_format;
-    return undef;
+sub _formatScore {
+    my $fmt = shift;
+    my $score = 0;
+
+    # Prefer audio-only
+    $score += 100 if ($fmt->{vcodec} || '') eq 'none';
+
+    # Prefer known high-quality format IDs
+    my $fid = $fmt->{format_id} // '';
+    $score += 60 if $fid eq '140'; # m4a 128kbps (aac) - highest native compatibility
+    $score += 40 if $fid eq '251'; # opus 160kbps (webm)
+    $score += 30 if $fid eq '250'; # opus 70kbps
+    $score += 20 if $fid eq '249'; # opus 50kbps
+    $score += 10 if $fid eq '139'; # m4a 48kbps (aac)
+
+    # Add bitrate score (capped)
+    my $abr = $fmt->{abr} || 0;
+    $score += ($abr > 200 ? 200 : $abr) / 10;
+
+    return $score;
 }
 
-sub getMetadata {
-	my ( $class, $client, $url ) = @_;
-    
-    if (my $song = $client->playingSong()) {
-        if (my $meta = $song->pluginData('metadata')) {
-            return $meta;
+# Convert browser cookie string to Netscape cookie file format
+sub _cookiesToNetscape {
+    my $cookie_str = shift;
+
+    my $header = "# Netscape HTTP Cookie File\n# This file is generated by LMS YouTubeMusic plugin\n\n";
+    my @lines;
+
+    # Parse semicolon-separated cookies
+    my @parts = split(/;\s*/, $cookie_str);
+    for my $part (@parts) {
+        $part =~ s/^\s+|\s+$//g;
+        next unless $part;
+        my ($name, $value) = split(/=/, $part, 2);
+        next unless defined $name && defined $value;
+        $name  =~ s/^\s+|\s+$//g;
+        $value =~ s/^\s+|\s+$//g;
+
+        # Netscape format: domain  flag  path  secure  expiry  name  value
+        # __Secure- and __Host- cookies must have secure=TRUE
+        my $secure = ($name =~ /^__Secure-/ || $name =~ /^__Host-/) ? 'TRUE' : 'FALSE';
+        push @lines, ".youtube.com\tTRUE\t/\t$secure\t2147483647\t$name\t$value";
+        push @lines, ".music.youtube.com\tTRUE\t/\t$secure\t2147483647\t$name\t$value";
+    }
+
+    return $header . join("\n", @lines) . "\n";
+}
+
+sub getMetadataFor {
+    my ($class, $client, $url) = @_;
+
+    if ($client) {
+        my $song = $client->playingSong();
+        if ($song && $song->track()->url eq $url) {
+            if (my $meta = $song->pluginData('metadata')) {
+                return {
+                    title    => $meta->{title},
+                    artist   => $meta->{artist},
+                    album    => $meta->{album},
+                    cover    => $meta->{image},
+                    bitrate  => $meta->{bitrate} ? sprintf('%d kbps', $meta->{bitrate} / 1000) : undef,
+                    type     => $meta->{type},
+                    duration => $meta->{duration},
+                };
+            }
         }
     }
-    
-    # Fallback or for non-playing tracks
-	return {
-		title => 'YouTube Music Track',
-	};
+
+    # Fallback to database track metadata if available
+    my $track = Slim::Schema->objectForUrl($url);
+    if ($track) {
+        return {
+            title    => $track->title,
+            artist   => $track->can('artistName') ? $track->artistName : undef,
+            album    => $track->can('albumName') ? $track->albumName : undef,
+            duration => $track->secs,
+        };
+    }
+
+    return { title => 'YouTube Music Track' };
 }
 
 1;

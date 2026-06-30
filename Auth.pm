@@ -3,7 +3,7 @@ package Plugins::YouTubeMusic::Auth;
 use strict;
 use Slim::Utils::Prefs;
 
-my $prefs = preferences('plugin.youtubemusic');
+my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 
 # Initialize defaults
 $prefs->init({

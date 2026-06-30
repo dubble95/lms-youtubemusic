@@ -3,52 +3,65 @@ package Plugins::YouTubeMusic::Settings;
 use strict;
 use base qw(Slim::Web::Settings);
 
+use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Cache;
-use Plugins::YouTubeMusic::Oauth2;
+use AnyEvent::Util;
 
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 my $cache = Slim::Utils::Cache->new();
+my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 
-sub name {
-    return 'PLUGIN_YOUTUBEMUSIC';
-}
-
-sub page {
-    return 'plugins/YouTubeMusic/settings/basic.html';
-}
-
-sub prefs {
-    return ($prefs, qw(cookie refresh_token));
-}
+sub name { return 'PLUGIN_YOUTUBEMUSIC' }
+sub page { return 'plugins/YouTubeMusic/settings/basic.html' }
+sub prefs { return ($prefs, qw(cookie)) }
 
 sub handler {
     my ($class, $client, $params, $callback, @args) = @_;
 
-    if ($params->{get_code}) {
-        Plugins::YouTubeMusic::Oauth2::getCode();
-    }
-    
-    if ($params->{refresh}) {
-        Plugins::YouTubeMusic::Oauth2::getToken();
-    }
-    
-    if ($params->{clear_token}) {
-        $cache->remove('ytm:access_token');
-        $prefs->remove('refresh_token');
-    }
+    # When cookie is saved via form POST, auto-regenerate ytmusicapi auth file
+    if ($params->{saveSettings} && $params->{pref_cookie}) {
+        my $cookie = $params->{pref_cookie};
+        $cookie =~ s/[\r\n]+/ /g;
+        $cookie =~ s/^\s+|\s+$//g;
 
-    $params->{user_code} = $cache->get('ytm:user_code');
-    $params->{authorize_link} = $cache->get('ytm:verification_url');
-    $params->{access_token} = $cache->get('ytm:access_token');
-    $params->{refresh_token} = $prefs->get('refresh_token');
-    
-    # If we have a device code but no access token, try to poll for it
-    if ($cache->get('ytm:device_code') && !$cache->get('ytm:access_token')) {
-        Plugins::YouTubeMusic::Oauth2::getToken();
+        if (length($cookie) > 50) {
+            $log->warn("Cookie saved — regenerating ytmusicapi auth file");
+            _regenerate_ytmusicapi_auth($cookie);
+        }
     }
 
     $callback->($client, $params, $class->SUPER::handler($client, $params), @args);
+}
+
+# Call Python helper to regenerate ytmusicapi auth JSON from cookie string
+sub _regenerate_ytmusicapi_auth {
+    my $cookie = shift;
+
+    my $plugin_info = Slim::Utils::PluginManager->allPlugins->{'YouTubeMusic'};
+    my $script = $plugin_info && $plugin_info->{basedir}
+        ? $plugin_info->{basedir} . '/ytm_auth_refresh.py'
+        : '/usr/share/squeezeboxserver/Plugins/YouTubeMusic/ytm_auth_refresh.py';
+
+    my @cmd = ('python3', $script, $cookie);
+
+    my $cv = AnyEvent::Util::run_cmd(
+        \@cmd,
+        '<', '/dev/null',
+        '>', \my $out,
+        '2>', \my $err,
+    );
+
+    $cv->cb(sub {
+        if ($err && length($err)) {
+            $log->warn("ytm_auth_refresh.py stderr: $err");
+        }
+        if ($out && $out =~ /OK/) {
+            $log->warn("ytmusicapi auth file regenerated successfully");
+        } else {
+            $log->error("ytm_auth_refresh.py failed: $out");
+        }
+    });
 }
 
 1;

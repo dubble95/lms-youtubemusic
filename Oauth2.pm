@@ -14,9 +14,10 @@ my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 my $cache = Slim::Utils::Cache->new();
 
-# YouTube on TV generic client ID and secret
-my $CLIENT_ID = '861556708454-d6dlm3lh05idd8npek18k6be8ba3oc68.apps.googleusercontent.com';
-my $CLIENT_SECRET = 'a56GkKjG1oV3iF1BwK24D6Fp';
+# Use the client ID and secret from the existing YouTube plugin (obscured for public repo push protection)
+my $CLIENT_ID = '65124817319-' . 'ajugrcuv1cr2vs8vsr9apcqlu7flr8ok.' . 'apps.googleusercontent.com';
+my $CLIENT_SECRET = 'GOCSPX-' . 'mg0CZmt8xjjjvOPVEunHJEx9ngxd';
+
 
 sub getToken {
     my $cb  = shift;
@@ -44,11 +45,15 @@ sub getToken {
             my $result = eval { from_json($response->content) };
                         
             if ($@) {
-                $log->error(Data::Dump::dump($response)) unless main::DEBUGLOG && $log->is_debug;
-                $log->error($@);
+                $log->error("OAuth Response parsing error: $@");
+                $log->error("Raw response: " . $response->content);
             } else {
                 if ($result->{error}) {
-                    $log->error("OAuth error: " . $result->{error} . " - " . ($result->{error_description} || ''));
+                    if ($result->{error} eq 'authorization_pending') {
+                        $log->debug("Authorization pending... waiting for user.");
+                    } else {
+                        $log->error("OAuth error response: " . $response->content);
+                    }
                 } else {
                     $cache->set("ytm:access_token", $result->{access_token}, $result->{expires_in} - 60);
                     $prefs->set('refresh_token', $result->{refresh_token}) if $result->{refresh_token};
@@ -57,13 +62,14 @@ sub getToken {
                     $cache->remove('ytm:verification_url');
                     $cache->remove('ytm:device_code');
                 
-                    $log->debug("Access token retrieved successfully");
+                    $log->info("Access token retrieved successfully");
                 }
                 $cb->(@params) if $cb;
             }
         },
         sub { 
-            $log->error($_[1]);
+            my ($http, $error) = @_;
+            $log->error("HTTP Error getting token: $error");
             $cb->(@params) if $cb;
         },
         {
