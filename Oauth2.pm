@@ -62,8 +62,11 @@ sub getToken {
                         # Dynamically write/update ytmusicapi_oauth.json
                         my $oauth_file = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json';
                         my $json = sprintf(
-                            '{"client_id": "%s", "client_secret": "%s", "refresh_token": "%s", "grant_type": "refresh_token"}',
-                            $CLIENT_ID, $CLIENT_SECRET, $result->{refresh_token}
+                            '{"client_id": "%s", "client_secret": "%s", "refresh_token": "%s", "grant_type": "refresh_token", "scope": "%s", "token_type": "%s", "access_token": "%s"}',
+                            $CLIENT_ID, $CLIENT_SECRET, $result->{refresh_token},
+                            $result->{scope} || 'https://www.googleapis.com/auth/youtube',
+                            $result->{token_type} || 'Bearer',
+                            $result->{access_token}
                         );
                         if (open(my $fh, '>', $oauth_file)) {
                             print $fh $json;
