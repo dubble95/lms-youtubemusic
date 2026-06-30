@@ -12,6 +12,7 @@ import urllib.request
 import urllib.error
 
 AUTH_FILE  = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_auth.json'
+AUTH_FILE_OAUTH = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json'
 PREFS_FILE = '/var/lib/squeezeboxserver/prefs/plugin/youtubemusic.prefs'
 API_BASE   = 'https://music.youtube.com/youtubei/v1/'
 API_KEY    = 'AIzaSyB-pwPtDkxF6JQmA8qq9h1md60MyI5Q5iA'
@@ -24,6 +25,12 @@ def get_ytm():
     """Return authenticated YTMusic instance, or None."""
     try:
         from ytmusicapi import YTMusic
+        
+        # 1. Try OAuth2 authentication first (permanent login)
+        if os.path.exists(AUTH_FILE_OAUTH):
+            return YTMusic(AUTH_FILE_OAUTH)
+            
+        # 2. Fall back to Cookie authentication
         if os.path.exists(AUTH_FILE):
             try:
                 # Read current auth JSON
