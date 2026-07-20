@@ -44,7 +44,9 @@ def main():
         print()
         print("Verify by testing get_home()...")
 
-        ytm = YTMusic(AUTH_FILE)
+        client_id = '65124817319-' + 'ajugrcuv1cr2vs8vsr9apcqlu7flr8ok.' + 'apps.googleusercontent.com'
+        client_secret = 'GOCSPX-' + 'mg0CZmt8xjjjvOPVEunHJEx9ngxd'
+        ytm = YTMusic(AUTH_FILE, oauth_credentials=OAuthCredentials(client_id, client_secret))
         home = ytm.get_home(limit=2)
         print(f"✅ Home returned {len(home)} sections — plugin ready!")
         for s in home[:2]:

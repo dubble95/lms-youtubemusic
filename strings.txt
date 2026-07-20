@@ -7,45 +7,45 @@ PLUGIN_YOUTUBEMUSIC_DESC
 	KO	YouTube Music 플러그인 설정을 구성합니다.
 
 PLUGIN_YOUTUBEMUSIC_COOKIE_DESC
-	EN	Enter your YouTube Music Cookie. (Note: Copying the ENTIRE Cookie header, including SID/HSID/SSID/SAPISID/__Secure-3PSID, will keep the session valid for up to 2 years.)
-	KO	YouTube Music 쿠키를 입력하세요. (주의: 임시 토큰만 복사하면 24시간 내에 만료되지만, 개발자도구에서 SID/HSID/SSID/SAPISID/__Secure-3PSID 등이 포함된 전체 Cookie 헤더 문자열을 복사해 넣으시면 최대 2년간 갱신 없이 정상 동작합니다.)
+	EN	Paste your cookies below using either method. This is required to access your library and play music.
+	KO	아래 두 가지 방법 중 하나로 쿠키를 붙여넣으세요. 라이브러리 접근과 음악 재생을 위해 필수입니다.
 
 AUTH_COOKIE
 	EN	Cookie Authentication
 	KO	쿠키 인증
 
-AUTH_OAUTH2
-	EN	OAuth2 Authentication (YouTube on TV)
-	KO	OAuth2 인증 (YouTube on TV)
+AUTH_COOKIE_METHOD1
+	EN	Method 1 — Easiest (recommended): browser extension
+	KO	방법 1 — 가장 쉬움 (권장): 브라우저 확장 프로그램
 
-AUTH_OAUTH2_DESC
-	EN	Authenticate using Google's device pairing.
-	KO	Google 기기 페어링을 사용하여 인증합니다.
+AUTH_COOKIE_METHOD1_STEPS
+	EN	1) Install the "Get cookies.txt LOCALLY" extension (Chrome/Firefox/Edge). Do NOT install the similarly-named "Get cookies.txt" — it was compromised.  2) Open https://music.youtube.com and make sure you are logged in.  3) Click the extension icon → "Export" → open the downloaded .txt file → copy its entire contents.  4) Paste it into the box below and click Save Settings.
+	KO	1) "Get cookies.txt LOCALLY" 확장 프로그램을 설치하세요 (Chrome/Firefox/Edge). 이름이 비슷한 "Get cookies.txt"는 설치하지 마세요 — 해킹된 적이 있습니다.  2) https://music.youtube.com 에 접속해 로그인되어 있는지 확인하세요.  3) 확장 아이콘 클릭 → "Export" → 다운로드된 .txt 파일을 열어 전체 내용을 복사하세요.  4) 아래 상자에 붙여넣고 Save Settings를 누르세요.
 
-AUTH_OAUTH2_GET_CODE
-	EN	Get Activation Code
-	KO	활성화 코드 받기
+AUTH_COOKIE_METHOD2
+	EN	Method 2 — Advanced: DevTools
+	KO	방법 2 — 고급: 개발자 도구
 
-AUTH_OAUTH2_CONNECTED
-	EN	Connected to YouTube Music
-	KO	YouTube Music에 연결됨
+AUTH_COOKIE_METHOD2_STEPS
+	EN	1) Open https://music.youtube.com and log in.  2) Press F12 → Network tab → click any request.  3) Under "Request Headers", copy the full value of the "Cookie:" header (it must include SID/HSID/SSID/SAPISID/__Secure-3PSID).  4) Paste it into the box below and click Save Settings.
+	KO	1) https://music.youtube.com 을 열고 로그인하세요.  2) F12 → Network 탭 → 아무 요청이나 클릭하세요.  3) "Request Headers"에서 "Cookie:" 헤더 전체 값을 복사하세요 (SID/HSID/SSID/SAPISID/__Secure-3PSID 가 모두 포함되어야 합니다).  4) 아래 상자에 붙여넣고 Save Settings를 누르세요.
 
-AUTH_OAUTH2_CLEAR
-	EN	Disconnect
-	KO	연결 해제
+AUTH_COOKIE_PLACEHOLDER
+	EN	Paste the cookies.txt contents (Method 1) or the Cookie header value (Method 2) here.
+	KO	cookies.txt 내용(방법 1) 또는 Cookie 헤더 값(방법 2)을 여기에 붙여넣으세요.
 
-AUTH_OAUTH2_INSTRUCTIONS
-	EN	Go to the link below and enter this code:
-	KO	아래 링크로 이동하여 다음 코드를 입력하세요:
+AUTH_STATUS
+	EN	Connection Status
+	KO	연결 상태
 
-AUTH_OAUTH2_LINK
-	EN	Google Activation Page
-	KO	Google 활성화 페이지
+AUTH_STATUS_DESC
+	EN	Current authentication state of the plugin.
+	KO	플러그인의 현재 인증 상태입니다.
 
-AUTH_OAUTH2_DONE
-	EN	I have entered the code
-	KO	코드를 입력했습니다
+AUTH_STATUS_CONNECTED_COOKIE
+	EN	✓ Connected (cookie configured)
+	KO	✓ 연결됨 (쿠키 설정됨)
 
-AUTH_OAUTH2_REFRESH
-	EN	Refresh Token
-	KO	토큰 갱신
+AUTH_STATUS_DISCONNECTED
+	EN	✗ Not authenticated — paste your cookies below using Method 1 or Method 2.
+	KO	✗ 인증되지 않음 — 방법 1 또는 방법 2로 아래에 쿠키를 입력하세요.

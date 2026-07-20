@@ -2,14 +2,28 @@
 """
 Regenerate ytmusicapi auth file from a browser cookie string.
 Called by Settings.pm when user saves new cookie in LMS Settings UI.
-Usage: python3 ytm_auth_refresh.py "<cookie_string>"
+Usage: python3 ytm_auth_refresh.py "<cookie_string>" [prefs_dir]
+
+prefs_dir is the LMS plugin prefs directory (where plugin/youtubemusic.prefs
+lives). It is supplied by Settings.pm via $prefs->dir so the path is resolved
+portably. If not provided, falls back to the env var LMS_PREFS_DIR, then to the
+historical Debian default.
 """
 import sys
 import os
 import hashlib
 import time
 
-AUTH_FILE  = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_auth.json'
+DEFAULT_PREFS_DIR = '/var/lib/squeezeboxserver/prefs/plugin'
+
+
+def _prefs_dir():
+    if len(sys.argv) >= 3 and sys.argv[2]:
+        return sys.argv[2]
+    env = os.environ.get('LMS_PREFS_DIR')
+    if env:
+        return env
+    return DEFAULT_PREFS_DIR
 
 
 def main():
@@ -21,6 +35,8 @@ def main():
     if len(cookie) < 50:
         print("ERROR: cookie string too short")
         sys.exit(1)
+
+    AUTH_FILE = os.path.join(_prefs_dir(), 'ytmusicapi_auth.json')
 
     # Extract SAPISID for SAPISIDHASH
     sapisid = ''

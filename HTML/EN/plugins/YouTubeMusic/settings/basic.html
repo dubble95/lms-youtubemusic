@@ -1,9 +1,27 @@
 [% PROCESS settings/header.html %]
 
 [% WRAPPER settingSection %]
-    [% WRAPPER settingGroup title="AUTH_COOKIE" desc="PLUGIN_YOUTUBEMUSIC_COOKIE_DESC" %]
-        <textarea name="pref_cookie" id="pref_cookie" rows="5" cols="60" class="stdedit">[% pref_cookie %]</textarea>
+
+    [% WRAPPER settingGroup title="AUTH_STATUS" desc="AUTH_STATUS_DESC" %]
+        [% IF cookie_configured %]
+            <b><font color="green">[% "AUTH_STATUS_CONNECTED_COOKIE" | string %]</font></b>
+        [% ELSE %]
+            <b><font color="red">[% "AUTH_STATUS_DISCONNECTED" | string %]</font></b>
+        [% END %]
     [% END %]
+
+    [% WRAPPER settingGroup title="AUTH_COOKIE" desc="PLUGIN_YOUTUBEMUSIC_COOKIE_DESC" %]
+        <div class="prefDesc" style="margin-bottom:6px">
+            <b>[% "AUTH_COOKIE_METHOD1" | string %]</b><br>
+            [% "AUTH_COOKIE_METHOD1_STEPS" | string %]
+        </div>
+        <div class="prefDesc" style="margin-bottom:6px">
+            <b>[% "AUTH_COOKIE_METHOD2" | string %]</b><br>
+            [% "AUTH_COOKIE_METHOD2_STEPS" | string %]
+        </div>
+        <textarea name="pref_cookie" id="pref_cookie" rows="10" cols="90" class="stdedit" placeholder="[% "AUTH_COOKIE_PLACEHOLDER" | string %]">[% pref_cookie %]</textarea>
+    [% END %]
+
 [% END %]
 
 [% PROCESS settings/footer.html %]

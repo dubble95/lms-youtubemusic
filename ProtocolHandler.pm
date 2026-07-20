@@ -95,11 +95,24 @@ sub getNextTrack {
     # Build yt-dlp command
     my @cmd = ($yt_dlp, '--no-warnings', '--quiet', '--extractor-args', 'youtube:player_client=web,default', '-j', $yt_url);
 
-    # Pass cookie directly as HTTP header — more reliable than Netscape cookie file format
-    my $cookie_str = $prefs->get('cookie');
-    if ($cookie_str) {
-        push @cmd, '--add-header', "Cookie:$cookie_str";
-        $log->info("Passing cookie via --add-header (length: " . length($cookie_str) . ")");
+    # Pass cookies via a Netscape cookies.txt file rather than --add-header.
+    # yt-dlp's cookie jar handles domain/path/secure matching and __Secure-/
+    # __Host- semantics correctly per sub-request, which a static header cannot.
+    # Prefer the verbatim cookies.txt the user pasted (cookie_raw pref) since
+    # it preserves the original secure/expiry/domain attributes; fall back to
+    # deriving a Netscape file from the normalized Cookie header otherwise.
+    my $cookie_raw  = $prefs->get('cookie_raw');
+    my $cookie_str  = $prefs->get('cookie');
+    if ($cookie_raw || $cookie_str) {
+        my $cookies_file = _write_cookies_file($cookie_raw, $cookie_str);
+        if ($cookies_file) {
+            push @cmd, '--cookies', $cookies_file;
+            $log->info("Passing cookies via --cookies $cookies_file (raw len: " . length($cookie_raw // '0') . ")");
+        } elsif ($cookie_str) {
+            # Fallback to header if file write failed.
+            push @cmd, '--add-header', "Cookie:$cookie_str";
+            $log->warn("Falling back to --add-header (cookie file write failed)");
+        }
     }
 
     my $cv = AnyEvent::Util::run_cmd(
@@ -207,6 +220,60 @@ sub _formatScore {
     return $score;
 }
 
+# Write the user's cookies to a Netscape cookies.txt file in the plugin prefs
+# dir and return the file path. Returns undef on failure. If the user pasted a
+# verbatim cookies.txt (cookie_raw pref), write it as-is so the original
+# secure/expiry/domain attributes are preserved; otherwise derive a Netscape
+# file from the normalized Cookie header.
+sub _write_cookies_file {
+    my ($cookie_raw, $cookie_str) = @_;
+
+    require Plugins::YouTubeMusic::Utils;
+    require File::Spec::Functions;
+
+    my $dir = Plugins::YouTubeMusic::Utils::prefs_dir();
+    return undef unless $dir && -d $dir;
+
+    my $file = File::Spec::Functions::catfile($dir, 'ytm_cookies.txt');
+
+    my $content;
+    if ($cookie_raw && _looks_like_netscape($cookie_raw)) {
+        # User pasted a real cookies.txt — use it verbatim.
+        $content = $cookie_raw;
+        $content .= "\n" unless $content =~ /\n$/;
+    } elsif ($cookie_str) {
+        $content = _cookiesToNetscape($cookie_str);
+    } else {
+        return undef;
+    }
+
+    eval {
+        open(my $fh, '>', $file) or die "open: $!";
+        print $fh $content;
+        close($fh);
+        chmod(0600, $file);
+    };
+    if ($@) {
+        $log->warn("Failed to write cookies file $file: $@");
+        return undef;
+    }
+
+    return $file;
+}
+
+# Heuristic: does this text look like a Netscape cookies.txt blob?
+sub _looks_like_netscape {
+    my $text = shift;
+    return 0 unless defined $text;
+    return 1 if $text =~ /#.*netscape.*cookie/i;
+    # Or: at least 3 lines with 7 tab-separated fields.
+    my $tab_lines = 0;
+    for my $ln (split /\n/, $text) {
+        $tab_lines++ if $ln !~ /^#/ && $ln =~ /\t/ && (scalar(split /\t/, $ln) >= 7);
+    }
+    return $tab_lines >= 3 ? 1 : 0;
+}
+
 # Convert browser cookie string to Netscape cookie file format
 sub _cookiesToNetscape {
     my $cookie_str = shift;
@@ -225,8 +292,12 @@ sub _cookiesToNetscape {
         $value =~ s/^\s+|\s+$//g;
 
         # Netscape format: domain  flag  path  secure  expiry  name  value
-        # __Secure- and __Host- cookies must have secure=TRUE
-        my $secure = ($name =~ /^__Secure-/ || $name =~ /^__Host-/) ? 'TRUE' : 'FALSE';
+        # YouTube sets these as Secure cookies (sent only over HTTPS):
+        # __Secure-*/__Host-* (required by spec), plus SAPISID/SSID family.
+        my $secure = ($name =~ /^__Secure-/ || $name =~ /^__Host-/
+                   || $name eq 'SAPISID'   || $name eq 'APISID'
+                   || $name eq 'SSID'      || $name eq 'SIDCC'
+                   || $name eq 'LOGIN_INFO') ? 'TRUE' : 'FALSE';
         push @lines, ".youtube.com\tTRUE\t/\t$secure\t2147483647\t$name\t$value";
         push @lines, ".music.youtube.com\tTRUE\t/\t$secure\t2147483647\t$name\t$value";
     }

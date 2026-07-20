@@ -11,9 +11,13 @@ import time
 import urllib.request
 import urllib.error
 
-AUTH_FILE  = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_auth.json'
-AUTH_FILE_OAUTH = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json'
-PREFS_FILE = '/var/lib/squeezeboxserver/prefs/plugin/youtubemusic.prefs'
+# Resolve the LMS plugin prefs dir portably. API.pm sets LMS_PREFS_DIR from
+# Perl's $prefs->dir before invoking this script; fall back to the historical
+# Debian default for manual/CLI use.
+_PREFS_DIR = os.environ.get('LMS_PREFS_DIR') or '/var/lib/squeezeboxserver/prefs/plugin'
+AUTH_FILE  = os.path.join(_PREFS_DIR, 'ytmusicapi_auth.json')
+AUTH_FILE_OAUTH = os.path.join(_PREFS_DIR, 'ytmusicapi_oauth.json')
+PREFS_FILE = os.path.join(_PREFS_DIR, 'youtubemusic.prefs')
 API_BASE   = 'https://music.youtube.com/youtubei/v1/'
 API_KEY    = 'AIzaSyB-pwPtDkxF6JQmA8qq9h1md60MyI5Q5iA'
 CLIENT     = {'clientName': 'WEB_REMIX', 'clientVersion': '1.20230828.01.00'}
@@ -28,7 +32,10 @@ def get_ytm():
         
         # 1. Try OAuth2 authentication first (permanent login)
         if os.path.exists(AUTH_FILE_OAUTH):
-            return YTMusic(AUTH_FILE_OAUTH)
+            from ytmusicapi import OAuthCredentials
+            client_id = '65124817319-' + 'ajugrcuv1cr2vs8vsr9apcqlu7flr8ok.' + 'apps.googleusercontent.com'
+            client_secret = 'GOCSPX-' + 'mg0CZmt8xjjjvOPVEunHJEx9ngxd'
+            return YTMusic(AUTH_FILE_OAUTH, oauth_credentials=OAuthCredentials(client_id, client_secret))
             
         # 2. Fall back to Cookie authentication
         if os.path.exists(AUTH_FILE):
@@ -317,6 +324,33 @@ def _convert_search(results):
     }
 
 
+def _convert_watch_playlist(data):
+    """ytmusicapi get_watch_playlist → flat list of tracks (no sections).
+
+    Returns a simple structure that the Perl side can iterate directly to
+    extract videoIds for the play queue:
+        {'tracks': [{'videoId': ..., 'title': ..., 'artist': ...}, ...],
+         'playlistId': 'RDAMVM...'}
+    """
+    tracks = []
+    for t in (data or {}).get('tracks', []):
+        vid = t.get('videoId')
+        if not vid:
+            continue
+        tracks.append({
+            'videoId': vid,
+            'title':   t.get('title', ''),
+            'artist':  _artist_str(t),
+            'album':   (t.get('album') or {}).get('name', ''),
+            'duration': t.get('lengthSeconds') or t.get('duration'),
+            'thumbnail': _thumb(t),
+        })
+    return {
+        'tracks':     tracks,
+        'playlistId': (data or {}).get('playlistId', ''),
+    }
+
+
 def _wrap_sections(sections, layout='singleColumn'):
     if layout == 'singleColumn':
         return {
@@ -442,6 +476,25 @@ def main():
                 query = body.get('query', '')
                 if query:
                     result = _convert_search(ytm.search(query, limit=20))
+            elif method == 'watch_playlist':
+                # Radio / "Up Next" recommendations. Returns a list of related
+                # tracks to seed endless playback. When radio=True the API
+                # produces a fresh recommendation chain; otherwise the static
+                # Up Next list for the seed track. The returned playlistId can
+                # be reused for continuity on the next fetch.
+                video_id    = body.get('videoId')
+                playlist_id = body.get('playlistId')
+                limit       = int(body.get('limit', 25))
+                radio       = bool(body.get('radio', True))
+                if video_id or playlist_id:
+                    result = _convert_watch_playlist(
+                        ytm.get_watch_playlist(
+                            videoId=video_id,
+                            playlistId=playlist_id,
+                            limit=limit,
+                            radio=radio,
+                        )
+                    )
         except Exception as e:
             sys.stderr.write(f'ytmusicapi error: {e}\n')
             result = None

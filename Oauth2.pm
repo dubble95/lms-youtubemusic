@@ -3,12 +3,14 @@ package Plugins::YouTubeMusic::Oauth2;
 use strict;
 
 use Data::Dumper;
+use File::Spec::Functions qw(catfile);
 
 use Slim::Utils::Prefs;
 use Slim::Utils::Log;
 use Slim::Utils::Cache;
 use Slim::Utils::Strings qw(string cstring);
 use JSON::XS::VersionOneAndTwo;
+use Plugins::YouTubeMusic::Utils;
 
 my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
@@ -58,9 +60,10 @@ sub getToken {
                     $cache->set("ytm:access_token", $result->{access_token}, $result->{expires_in} - 60);
                     if ($result->{refresh_token}) {
                         $prefs->set('refresh_token', $result->{refresh_token});
-                        
+
                         # Dynamically write/update ytmusicapi_oauth.json
-                        my $oauth_file = '/var/lib/squeezeboxserver/prefs/plugin/ytmusicapi_oauth.json';
+                        # Resolve the prefs dir portably via Utils::prefs_dir().
+                        my $oauth_file = catfile(Plugins::YouTubeMusic::Utils::prefs_dir(), 'ytmusicapi_oauth.json');
                         my $json = sprintf(
                             '{"client_id": "%s", "client_secret": "%s", "refresh_token": "%s", "grant_type": "refresh_token", "scope": "%s", "token_type": "%s", "access_token": "%s"}',
                             $CLIENT_ID, $CLIENT_SECRET, $result->{refresh_token},

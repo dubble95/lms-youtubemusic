@@ -9,6 +9,34 @@ use Slim::Utils::Log;
 
 my $log = Slim::Utils::Log::logger('plugin.youtubemusic');
 
+# Return the LMS plugin prefs directory (the dir containing plugin/youtubemusic.prefs).
+# The LMS prefs API exposes the absolute path neither via a method nor via
+# $prefs->dir (that AUTOLOADs into pref values). Instead we resolve it from the
+# namespace's internal 'file' attribute, then fall back to the global $::prefsdir
+# (the --prefsdir flag, always set at boot), and finally to the historical
+# Debian default. Using catdir keeps it portable across platforms.
+sub prefs_dir {
+    my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
+
+    # 1. The Namespace object is a blessed hashref with its .prefs file path
+    # stored under the 'file' key.
+    if ($prefs && $prefs->{'file'}) {
+        my ($vol, $dir, $file) = File::Spec::Functions::splitpath($prefs->{'file'});
+        # splitpath returns the directory without the trailing filename portion;
+        # on Unix $dir is the full parent dir. Make sure it exists.
+        return $dir if $dir && -d $dir;
+    }
+
+    # 2. The global prefsdir flag + plugin suffix.
+    if (defined $::prefsdir && length $::prefsdir) {
+        my $dir = catdir($::prefsdir, 'plugin');
+        return $dir if -d $dir;
+    }
+
+    # 3. Historical Debian default.
+    return '/var/lib/squeezeboxserver/prefs/plugin';
+}
+
 sub yt_dlp_binary {
 	my $bin;	
 	my $os = Slim::Utils::OSDetect::details();

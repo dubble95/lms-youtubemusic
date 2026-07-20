@@ -9,6 +9,7 @@ use Slim::Utils::Prefs;
 use Plugins::YouTubeMusic::Auth;
 use Plugins::YouTubeMusic::API;
 use Plugins::YouTubeMusic::ProtocolHandler;
+use Plugins::YouTubeMusic::Radio;
 
 my $log = Slim::Utils::Log->addLogCategory({
     'category'     => 'plugin.youtubemusic',
@@ -54,6 +55,9 @@ sub initPlugin {
     }
 
     $log->warn('YouTube Music plugin loaded.');
+
+    # Start the endless-radio auto-queue (subscribes to playlist notifications).
+    Plugins::YouTubeMusic::Radio->init();
 }
 
 

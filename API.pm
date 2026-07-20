@@ -6,6 +6,7 @@ use JSON::XS::VersionOneAndTwo;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use AnyEvent::Util;
+use Plugins::YouTubeMusic::Utils;
 
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
@@ -33,6 +34,13 @@ sub search {
     _call('search', $body, $cb);
 }
 
+# Fetch YouTube Music's radio / "Up Next" recommendations for endless playback.
+# $seed_ref = { videoId => '...', playlistId => '...', limit => 25, radio => 1 }
+sub watch_playlist {
+    my ($class, $cb, $seed_ref) = @_;
+    _call('watch_playlist', $seed_ref || {}, $cb);
+}
+
 sub _call {
     my ($method, $body, $cb) = @_;
 
@@ -43,6 +51,10 @@ sub _call {
     my $body_str = to_json($body);
 
     $log->warn("API calling $method via Python script (cookie length: " . length($cookie) . ")");
+
+    # Tell the Python helper where the LMS plugin prefs dir is so it does not
+    # have to hardcode /var/lib/squeezeboxserver/prefs/plugin.
+    local $ENV{LMS_PREFS_DIR} = Plugins::YouTubeMusic::Utils::prefs_dir();
 
     my @cmd = ('python3', $script, $method, $body_str, $cookie);
 
