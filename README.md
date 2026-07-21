@@ -1,158 +1,156 @@
 # YouTube Music Plugin for Lyrion Music Server (LMS)
 
-Lyrion Music Server(LMS, 구 Logitech Media Server)에서 YouTube Music을 탐색하고 재생하는 플러그인입니다.
+Browse and play music from YouTube Music on your Lyrion Music Server (LMS, formerly Logitech Media Server).
 
-Browse and play music from YouTube Music on your Lyrion Music Server.
+## Features
 
-## Features / 주요 기능
+- **InnerTube API integration** — Communicates directly with the YouTube Music internal API (search, home, library, charts, album/playlist browsing)
+- **Cookie authentication (single method)** — Enter cookies via a browser extension or DevTools. Automatic format detection supports both `cookies.txt` and raw Cookie header strings
+- **High-quality audio** — Extracts the best audio stream via `yt-dlp` (Opus/M4A)
+- **Metadata support** — Displays track title, artist, album, and album artwork
+- **Automatic path detection** — Detects the LMS prefs directory at runtime. Works on any OS / install path
 
-- **InnerTube API 연동** — YouTube Music 내부 API로 직접 통신 (검색, 홈, 라이브러리, 차트, 앨범/플레이리스트 탐색)
-- **쿠키 인증 (단일 방식)** — 브라우저 확장 또는 DevTools로 쿠키 입력. 자동 형식 감지로 `cookies.txt`와 raw Cookie 헤더 모두 지원
-- **고음질 오디오** — `yt-dlp`로 최적의 오디오 스트림 추출 (Opus/M4A)
-- **메타데이터 지원** — 곡 제목, 아티스트, 앨범, 앨범 아트워크 표시
-- **경로 자동 감지** — LMS prefs 디렉토리를 런타임에 자동 감지. 어느 OS/설치 경로에서도 동작
+## Installation
 
-## Installation / 설치
-
-1. 저장소를 다운로드하거나 clone 합니다.
-2. `YouTubeMusic` 디렉토리를 LMS `Plugins` 디렉토리에 복사합니다.
-   - Linux: 일반적으로 `/var/lib/squeezeboxserver/Plugins`
-   - 최종 경로가 `.../Plugins/YouTubeMusic/Plugin.pm` 이 되도록 합니다.
-3. LMS를 재시작합니다.
+1. Download or clone this repository.
+2. Copy the `YouTubeMusic` directory into your LMS `Plugins` directory.
+   - Linux: typically `/var/lib/squeezeboxserver/Plugins`
+   - The final path should be `.../Plugins/YouTubeMusic/Plugin.pm`
+3. Restart LMS:
    ```bash
    sudo systemctl restart lyrionmusicserver
-   # 또는 구 버전: sudo systemctl restart squeezeboxserver
+   # or on older installs: sudo systemctl restart squeezeboxserver
    ```
-4. **Settings → Plugins** 에서 "YouTube Music" 이 활성화되어 있는지 확인합니다.
+4. Enable "YouTube Music" under **Settings → Plugins**.
 
-## Authentication / 인증하기 (필수)
+## Authentication (required)
 
-재생하려면 YouTube Music 쿠키가 필요합니다. 두 가지 방법 중 편한 쪽을 선택하세요. **방법 1이 훨씬 쉽습니다.**
+Playing music requires YouTube Music cookies. Choose whichever of the two methods below is more convenient. **Method 1 is by far the easiest.**
 
-> **참고**: 이전 버전의 OAuth2 ("YouTube on TV" 기기 페어링)는 제거되었습니다. YouTube Music의 InnerTube API가 OAuth Bearer 토큰을 거부하기 때문입니다 (익명 호출은 200, OAuth Bearer 호출은 400). 따라서 쿠키 방식만 지원합니다.
+> **Note**: The previous OAuth2 ("YouTube on TV" device pairing) flow has been removed because the YouTube Music InnerTube API rejects OAuth Bearer tokens (anonymous calls return 200, OAuth Bearer calls return 400). Only cookie-based authentication is supported.
 
-### 방법 1 — 브라우저 확장 프로그램 (권장, 가장 쉬움)
+### Method 1 — Browser extension (recommended, easiest)
 
-개발자 도구를 열 필요 없이 클릭 몇 번으로 쿠키를 얻습니다.
+Get cookies in a few clicks without opening developer tools.
 
-**1. 확장 프로그램 설치**
-- Chrome / Edge / Firefox 용 **"Get cookies.txt LOCALLY"** 설치
+**1. Install the extension**
+- Install **"Get cookies.txt LOCALLY"** for Chrome / Edge / Firefox
   - Chrome Web Store: https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc
-  - 소스코드 (오픈소스): https://github.com/kairi003/Get-cookies.txt-LOCALLY
+  - Source code (open source): https://github.com/kairi003/Get-cookies.txt-LOCALLY
 
-  > ⚠️ **경고**: 이름이 비슷한 **"Get cookies.txt"** (끝에 "LOCALLY" 없음)는 **해킹된 적이 있으므로 절대 설치하지 마세요**. 반드시 "LOCALLY" 버전을 설치하세요.
+  > ⚠️ **Warning**: Do NOT install the similarly-named **"Get cookies.txt"** (without "LOCALLY") — it has been compromised. Always install the "LOCALLY" version.
 
-**2. 쿠키 내보내기**
-1. 브라우저에서 https://music.youtube.com 을 열고 로그인되어 있는지 확인합니다.
-2. 확장 프로그램 아이콘을 클릭합니다.
-3. **"Export"** 를 클릭하면 `youtube.com_cookies.txt` 파일이 다운로드됩니다.
+**2. Export the cookies**
+1. Open https://music.youtube.com in your browser and make sure you are logged in.
+2. Click the extension icon.
+3. Click **"Export"** — a `youtube.com_cookies.txt` file will be downloaded.
 
-**3. LMS에 입력**
-1. 다운로드한 `.txt` 파일을 텍스트 에디터로 엽니다.
-2. **전체 내용**을 복사합니다 (`# Netscape HTTP Cookie File` 로 시작하는 부분부터 전부).
-3. LMS 웹 설정 → **YouTube Music** 설정 페이지의 쿠키 입력칸에 붙여넣습니다.
-4. **Save Settings** 를 클릭합니다. 플러그인이 자동으로 `cookies.txt` 형식을 인식해 변환합니다.
-
----
-
-### 방법 2 — 개발자 도구 (DevTools, 고급)
-
-확장 프로그램을 설치할 수 없는 환경에서 사용합니다.
-
-1. 브라우저에서 https://music.youtube.com 을 열고 로그인합니다.
-2. **F12** 키를 눌러 개발자 도구를 엽니다.
-3. **Network** (네트워크) 탭을 선택합니다.
-4. 페이지에서 아무 링크나 클릭하거나 곡을 재생하여 요청을 발생시킵니다.
-5. **`music.youtube.com` 도메인**인 요청 아무거나 클릭합니다.
-   - 주의: `www.google.com` 요청이 아닌, 반드시 `music.youtube.com` 요청이어야 합니다.
-6. **Headers** → **Request Headers** 에서 `Cookie:` 헤더를 찾아 **전체 값**을 복사합니다.
-   - 반드시 `SID`, `HSID`, `SSID`, `SAPISID`, `__Secure-3PSID` 가 모두 포함되어야 합니다.
-7. LMS 웹 설정 → **YouTube Music** 설정 페이지에 붙여넣고 **Save Settings** 를 클릭합니다.
-
-> **팁**: 쿠키가 유효하지 않거나 필수 쿠키가 누락된 경우 플러그인 로그에 경고가 기록됩니다. LMS 설정 → 고급 → 로그 설정에서 `plugin.youtubemusic` 카테고리를 `INFO` 이상으로 켜면 확인할 수 있습니다.
+**3. Enter them in LMS**
+1. Open the downloaded `.txt` file in a text editor.
+2. Copy **the entire contents** (starting from `# Netscape HTTP Cookie File`).
+3. Paste it into the cookie input box on the **YouTube Music** settings page in the LMS web UI.
+4. Click **Save Settings**. The plugin automatically recognizes the `cookies.txt` format and converts it.
 
 ---
 
-### 인증 상태 확인
+### Method 2 — Developer tools (DevTools, advanced)
 
-설정 페이지 상단의 **Connection Status** 표시로 현재 인증 상태를 확인할 수 있습니다:
-- 🟢 **✓ Connected (cookie configured)** — 정상
-- 🔴 **✗ Not authenticated** — 쿠키 입력 필요
+Use this when you cannot install a browser extension.
 
-## 쿠키가 만료되면?
+1. Open https://music.youtube.com in your browser and log in.
+2. Press **F12** to open the developer tools.
+3. Select the **Network** tab.
+4. Click any link or play a track on the page to generate a request.
+5. Click any request whose domain is **`music.youtube.com`**.
+   - Note: it must be a `music.youtube.com` request, not a `www.google.com` request.
+6. Under **Headers** → **Request Headers**, find the `Cookie:` header and copy its **entire value**.
+   - It must include `SID`, `HSID`, `SSID`, `SAPISID`, and `__Secure-3PSID`.
+7. Paste it into the **YouTube Music** settings page in the LMS web UI and click **Save Settings**.
 
-- **방법 1 (확장)** 로 내보낸 전체 쿠키: 약 2년간 유효합니다.
-- 쿠키가 만료되면 위 과정을 다시 수행해서 새 쿠키를 붙여넣으세요.
-- 음악이 갑자기 재생되지 않거나 라이브러리가 비어 보인다면 쿠키 갱신을 먼저 시도하세요.
+> **Tip**: If the cookie is invalid or required cookies are missing, a warning is logged by the plugin. You can inspect it by enabling the `plugin.youtubemusic` category at `INFO` level or higher under LMS settings → Advanced → Logging settings.
 
-## YouTube Music Premium 안내
+---
 
-- **공개 영상**(일반 유튜브 영상)은 Premium 구독 여부와 무관하게 재생됩니다.
-- **음악 전용 트랙**(뮤직 비디오가 없는 음원)은 재생에 **YouTube Music Premium 구독이 필요**합니다.
-  - Premium 구독 중인 계정의 쿠키를 입력해야 합니다.
-  - Premium 인증이 안 되면 해당 곡에서 yt-dlp가 "Requested format is not available" 에러를 냅니다.
+### Checking authentication status
 
-## Dependencies / 의존성
+The **Connection Status** indicator at the top of the settings page shows the current state:
+- 🟢 **✓ Connected (cookie configured)** — OK
+- 🔴 **✗ Not authenticated** — cookie input required
 
-- LMS 8.0 이상
-- 시스템 `yt-dlp` (권장, 자동 감지됨) 또는 플러그인에 포함된 `Bin/yt-dlp_*` 바이너리
-- Python 3 + `ytmusicapi` (API 호출용)
+## When cookies expire
 
-### Premium 음악 재생을 위한 추가 요구사항 (중요)
+- Cookies exported via **Method 1 (extension)** are valid for approximately 2 years.
+- When a cookie expires, repeat the steps above to paste a fresh cookie.
+- If music suddenly stops playing or the library appears empty, try refreshing the cookie first.
 
-2025년 말부터 YouTube가 **SABR 스트리밍 + JS challenge(n-challenge)**를 강제하여, Premium 전용 음악 트랙을 재생하려면 **JS 런타임과 EJS challenge solver**가 필요합니다. 공개 영상만 재생한다면 이 설정 없이도 동작하지만, YouTube Music의 음악 전용 트랙(대부분의 곡)을 듣으려면 아래 설치가 필요합니다.
+## About YouTube Music Premium
 
-**권장: QuickJS 사용** (Raspberry Pi 등 메모리 제약 환경에 특히 적합)
+- **Public videos** (regular YouTube videos) play regardless of Premium subscription.
+- **Music-only tracks** (audio-only tracks without a music video) require a **YouTube Music Premium subscription** to play.
+  - You must enter cookies from a Premium-subscribed account.
+  - Without Premium authentication, yt-dlp will fail with "Requested format is not available" on those tracks.
 
-QuickJS는 ~5MB 바이너리로 Node(~90MB)의 1/18 메모리만 쓰므로, Pi Zero 2 W 같은 저메모리 기기에서 안정적입니다.
+## Dependencies
+
+- LMS 8.0 or newer
+- System `yt-dlp` (recommended, auto-detected) or the bundled `Bin/yt-dlp_*` binary
+- Python 3 + `ytmusicapi` (for API calls)
+
+### Additional requirements for Premium music playback (important)
+
+Since late 2025, YouTube enforces **SABR streaming + a JS challenge (n-challenge)**. Playing Premium-exclusive music tracks therefore requires a **JS runtime and the EJS challenge solver**. If you only play public videos you can skip this setup, but listening to YouTube Music's music-only tracks (most songs) requires the installation below.
+
+**Recommended: use QuickJS** (especially well-suited to memory-constrained environments like Raspberry Pi)
+
+QuickJS is a ~5 MB binary and uses roughly 1/18th the memory of Node (~90 MB), making it stable on low-memory devices such as the Pi Zero 2 W.
 
 ```bash
-# 1. QuickJS 소스 컴파일 (gcc 필요)
+# 1. Compile QuickJS from source (requires gcc)
 sudo apt-get install -y gcc make
 cd /tmp
 wget https://github.com/bellard/quickjs/archive/refs/heads/master.tar.gz -O qjs.tar.gz
 tar xzf qjs.tar.gz
 cd quickjs-master
 
-# armv7l(32비트 Pi)에서는 -latomic 추가 필요
+# On armv7l (32-bit Pi) you must add -latomic
 sed -i 's/^LIBS=-lm -lpthread/LIBS=-lm -lpthread -latomic/' Makefile
 sed -i 's/HOST_LIBS=-lm -ldl -lpthread/HOST_LIBS=-lm -ldl -lpthread -latomic/' Makefile
 
 make qjs
 sudo cp qjs /usr/local/bin/qjs
 sudo chmod 755 /usr/local/bin/qjs
-qjs -e "console.log(42)"  # 42 출력 확인
+qjs -e "console.log(42)"  # should print 42
 
-# 2. yt-dlp-ejs (challenge solver) 설치
+# 2. Install yt-dlp-ejs (the challenge solver)
 sudo pip3 install -U yt-dlp-ejs
 
-# 3. 확인
+# 3. Verify
 yt-dlp --js-runtimes quickjs --verbose --list-formats "https://music.youtube.com/watch?v=<videoId>"
-# 다음이 보이면 정상:
+# Success looks like:
 #   [debug] JS runtimes: quickjs-<version>
 #   [debug] [youtube] [jsc] JS Challenge Providers: ... quickjs
 ```
 
-> **대안: Node.js 22 이상** — QuickJS 컴파일이 어려운 x86_64/aarch64 환경에서는 Node 22 이상을 설치하고 `/usr/local/bin/node`로 접근 가능하게 하면 됩니다. 단, Pi Zero 2 W(422MB RAM)에서는 Node의 메모리 사용량이 과도해 QuickJS를 권장합니다. 플러그인의 `ProtocolHandler.pm`에서 `--js-runtimes quickjs`를 `--js-runtimes node`로 변경하면 됩니다.
+> **Alternative: Node.js 22 or newer** — On x86_64/aarch64 where compiling QuickJS is awkward, install Node 22+ and make it accessible at `/usr/local/bin/node`. Note that on a Pi Zero 2 W (422 MB RAM) Node's memory footprint is excessive, so QuickJS is recommended. To switch, change `--js-runtimes quickjs` to `--js-runtimes node` in the plugin's `ProtocolHandler.pm`.
 
-설치하지 않으면 공개 영상만 재생되고 Premium 음악 트랙은 "Requested format is not available" 에러로 스킵됩니다.
+Without this setup, only public videos will play; Premium music tracks will be skipped with a "Requested format is not available" error.
 
-## 파일 구조 (주요 파일)
+## File structure (key files)
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `Plugin.pm` | 진입점, OPML 메뉴 (Search/Home/Explore/Charts/Library) |
-| `Settings.pm` | 웹 설정 페이지 핸들러, 쿠키 정규화 |
-| `ProtocolHandler.pm` | `ytmusic://` 프로토콜 처리, yt-dlp 스트림 해석 |
-| `API.pm` | 검색/탐색 API 호출 (Python 헬퍼 경유) |
-| `Utils.pm` | `prefs_dir()` 경로 자동 감지, yt-dlp 바이너리 탐지 |
-| `ytm_api.py` | ytmusicapi 실제 API 호출기 |
-| `ytm_netscape_to_cookie.py` | cookies.txt ↔ Cookie 헤더 변환 |
-| `ytm_auth_refresh.py` | 쿠키로부터 ytmusicapi auth 파일 생성 |
-| `HTML/EN/plugins/YouTubeMusic/settings/basic.html` | 웹 설정 UI |
+| `Plugin.pm` | Entry point, OPML menu (Search/Home/Explore/Charts/Library) |
+| `Settings.pm` | Web settings page handler, cookie normalization |
+| `ProtocolHandler.pm` | `ytmusic://` protocol handling, yt-dlp stream resolution |
+| `API.pm` | Search/browse API calls (via the Python helper) |
+| `Utils.pm` | `prefs_dir()` path auto-detection, yt-dlp binary detection |
+| `ytm_api.py` | Actual ytmusicapi caller |
+| `ytm_netscape_to_cookie.py` | cookies.txt ↔ Cookie header conversion |
+| `ytm_auth_refresh.py` | Generates the ytmusicapi auth file from cookies |
+| `HTML/EN/plugins/YouTubeMusic/settings/basic.html` | Web settings UI |
 
-## Acknowledgements / 감사의 글
+## Acknowledgements
 
-- `philippe44/LMS-YouTube` 플러그인 아키텍처 기반
-- 미디어 추출에 `yt-dlp` 사용
-- API 호출에 `ytmusicapi` 사용
+- Based on the `philippe44/LMS-YouTube` plugin architecture
+- Uses `yt-dlp` for media extraction
+- Uses `ytmusicapi` for API calls
