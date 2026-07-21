@@ -62,9 +62,11 @@ sub new {
 
 sub getFormatForURL {
     my ($class, $url) = @_;
-    my $song = Slim::Player::Playlist::song($url);
-    my $meta = $song ? $song->pluginData('metadata') : {};
-    return $meta->{type} || 'aac';
+    my ($id) = $url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
+    if ($id && $_stream_cache{$id} && $_stream_cache{$id}->{meta}) {
+        return $_stream_cache{$id}->{meta}->{type} || 'aac';
+    }
+    return 'aac';
 }
 
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
