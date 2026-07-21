@@ -5,12 +5,16 @@
   <version>1.0.0</version>
   <module>Plugins::YouTubeMusic::Plugin</module>
   <description>Play YouTube Music in Lyrion Music Server.</description>
-  <creator>Gemini CLI</creator>
+  <creator>dubble95</creator>
   <email></email>
-  <homepage></homepage>
+  <homepage>https://github.com/dubble95/lms-youtubemusic</homepage>
   <icon>plugins/YouTubeMusic/html/images/icon_50x50.png</icon>
+  <iconsvg>plugins/YouTubeMusic/html/images/icon.svg</iconsvg>
   <optionsURL>plugins/YouTubeMusic/settings/basic.html</optionsURL>
+  <defaultState>enabled</defaultState>
+  <category>musicservices</category>
   <targetApplication>
+    <id>SlimServer</id>
     <maxVersion>*</maxVersion>
     <minVersion>8.0</minVersion>
   </targetApplication>

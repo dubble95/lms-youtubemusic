@@ -12,6 +12,16 @@ use AnyEvent::Util;
 my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 
+# In-memory cache of resolved streams keyed by video ID. Each entry is a hash:
+#   { url => <streamURL>, meta => {title,artist,...}, ts => <time> }
+# Prefetched entries land here so the next getNextTrack() returns instantly
+# instead of paying yt-dlp's ~10-20s resolution latency on every track change.
+my %_stream_cache;
+my $_stream_cache_ttl = 1800;  # 30 minutes
+
+# Guard against prefetch storms: one outstanding prefetch at a time.
+my $_prefetch_in_progress = 0;
+
 # Register the protocol handler
 Slim::Player::ProtocolHandlers->registerHandler('ytmusic', __PACKAGE__);
 
@@ -79,8 +89,6 @@ sub getNextTrack {
         return;
     }
 
-    $log->info("Using yt-dlp: $yt_dlp");
-
     my $url = $song->track()->url;
     my ($id) = $url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
 
@@ -89,8 +97,26 @@ sub getNextTrack {
         return;
     }
 
+    # ── Cache hit: skip yt-dlp entirely ──────────────────────────────────
+    # A prefetched entry lets us return in milliseconds instead of waiting
+    # 10-20s for yt-dlp + the n-challenge solver.
+    my $cached = $_stream_cache{$id};
+    if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
+        $log->info("Cache HIT for $id — skipping yt-dlp");
+        _apply_resolved($song, $id, $cached);
+        $successCb->();
+        _prefetch_next($song);
+        return;
+    }
+    if ($cached) {
+        # Expired — drop it so we don't reuse a stale URL.
+        delete $_stream_cache{$id};
+    }
+
+    $log->info("Cache MISS for $id — resolving via yt-dlp");
+    $log->info("Using yt-dlp: $yt_dlp");
+
     my $yt_url = "https://music.youtube.com/watch?v=$id";
-    $log->info("Getting track info for: $yt_url");
 
     # Build yt-dlp command.
     # --js-runtimes quickjs: enable QuickJS as the JS challenge solver runtime.
@@ -133,97 +159,207 @@ sub getNextTrack {
     );
 
     $cv->cb(sub {
-        # Strip any non-JSON lines before the actual JSON (e.g. yt-dlp deprecation warnings)
-        my $json_str = $tracks_json // '';
-        if ($json_str =~ /^(.*?)(\{.+)$/s) {
-            $json_str = $2;  # Take only from first '{'
-        }
+        my $resolved = _parse_ytdlp_output($tracks_json, $err, $id, $errorCb);
+        return unless $resolved;  # error callback already invoked
 
-        my $tracks = eval { decode_json($json_str) };
+        # Store in the in-memory stream cache for future prefetch hits.
+        $_stream_cache{$id} = { %$resolved, ts => time() };
 
-        if ($@ || !$tracks) {
-            $log->error("yt-dlp failed for $id: $err");
-            $log->error("yt-dlp stdout was: " . substr($tracks_json || '', 0, 200));
-            $errorCb->($@ || "yt-dlp failed: $err");
-            return;
-        }
-
-        # Store metadata. Prefer the largest thumbnail from the 'thumbnails'
-        # array for crisp cover art; fall back to the single 'thumbnail' field.
-        my $cover = _pick_best_thumbnail($tracks);
-
-        $song->pluginData(metadata => {
-            title    => $tracks->{title},
-            artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
-            album    => $tracks->{album},
-            duration => $tracks->{duration},
-            image    => $cover,
-        });
-
-        # Set track duration + persist cover URL on the track row so the
-        # artwork shows up for the currently playing item too.
-        eval {
-            $song->track->secs($tracks->{duration}) if $tracks->{duration};
-            $song->track->cover($cover) if $cover && $song->track->can('cover');
-            $song->track->update if $song->track->in_storage;
-        };
-
-        # Also refresh the url-keyed metadata cache so getMetadataFor stays
-        # consistent with what yt-dlp returned (richer than the radio metadata).
-        require Slim::Utils::Cache;
-        Slim::Utils::Cache->new()->set("ytm:meta:" . $song->track()->url, {
-            title    => $tracks->{title},
-            artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
-            album    => $tracks->{album},
-            cover    => $cover,
-            duration => $tracks->{duration},
-        }, 86400);
-
-        # Select best audio format
-        # Must have: vcodec=none, real acodec (not 'none'), real ext (not 'mhtml'), and a URL
-        my $formats = $tracks->{formats} || [];
-        my @audio_formats = grep {
-            my $f = $_;
-            ($f->{vcodec} || '') eq 'none'
-            && $f->{acodec} && $f->{acodec} ne 'none'
-            && ($f->{ext} || '') ne 'mhtml'
-            && $f->{url}
-        } @$formats;
-
-        if (!@audio_formats) {
-            $log->error("No audio-only formats found for $id, trying any format with audio");
-            # Fallback: any format that has an audio codec and URL
-            @audio_formats = grep { $_->{acodec} && $_->{acodec} ne 'none' && $_->{url} } @$formats;
-        }
-
-        if (!@audio_formats) {
-            $errorCb->("No suitable audio stream found for $id");
-            return;
-        }
-
-        # Sort by preference: opus/webm (251) > m4a (140) > then by bitrate
-        my @sorted = sort {
-            my $a_score = _formatScore($a);
-            my $b_score = _formatScore($b);
-            $b_score <=> $a_score;
-        } @audio_formats;
-
-        my $best = $sorted[0];
-
-        $log->info(sprintf("Selected format %s (%s, %skbps) for %s",
-            $best->{format_id} // '?',
-            $best->{ext}       // '?',
-            $best->{abr}       // '?',
-            $id));
-
-        # Update metadata with codec info
-        my $meta = $song->pluginData('metadata') || {};
-        $meta->{type}    = 'aac';
-        $meta->{bitrate} = ($best->{abr} || 0) * 1000;
-        $song->pluginData(metadata => $meta);
-
-        $song->pluginData(url => $best->{url});
+        _apply_resolved($song, $id, $resolved);
         $successCb->();
+        _prefetch_next($song);
+    });
+}
+
+# Apply an already-resolved stream (from cache or fresh yt-dlp run) to a song:
+# write pluginData, persist track metadata, refresh the url-keyed cache used
+# by getMetadataFor for queued tracks.
+sub _apply_resolved {
+    my ($song, $id, $resolved) = @_;
+
+    my $meta = $resolved->{meta};
+
+    $song->pluginData(metadata => {
+        title    => $meta->{title},
+        artist   => $meta->{artist},
+        album    => $meta->{album},
+        duration => $meta->{duration},
+        image    => $meta->{cover},
+        type     => 'aac',
+        bitrate  => $resolved->{abr} ? $resolved->{abr} * 1000 : undef,
+    });
+
+    # Set track duration + persist cover URL on the track row so the
+    # artwork shows up for the currently playing item too.
+    eval {
+        $song->track->secs($meta->{duration}) if $meta->{duration};
+        $song->track->cover($meta->{cover}) if $meta->{cover} && $song->track->can('cover');
+        $song->track->update if $song->track->in_storage;
+    };
+
+    # Also refresh the url-keyed metadata cache so getMetadataFor stays
+    # consistent with what yt-dlp returned (richer than the radio metadata).
+    require Slim::Utils::Cache;
+    Slim::Utils::Cache->new()->set("ytm:meta:" . $song->track()->url, {
+        title    => $meta->{title},
+        artist   => $meta->{artist},
+        album    => $meta->{album},
+        cover    => $meta->{cover},
+        duration => $meta->{duration},
+    }, 86400);
+
+    $song->pluginData(url => $resolved->{url});
+
+    $log->info(sprintf("Resolved %s -> format %s (%s, %skbps)",
+        $id, $resolved->{format_id} // '?',
+        $resolved->{ext} // '?', $resolved->{abr} // '?'));
+}
+
+# Parse yt-dlp JSON output into a normalized resolution result, or invoke
+# $errorCb and return undef on failure. Result shape:
+#   { url, format_id, ext, abr, meta => {title,artist,album,duration,cover} }
+sub _parse_ytdlp_output {
+    my ($tracks_json, $err, $id, $errorCb) = @_;
+
+    # Strip any non-JSON lines before the actual JSON (e.g. yt-dlp deprecation warnings)
+    my $json_str = $tracks_json // '';
+    if ($json_str =~ /^(.*?)(\{.+)$/s) {
+        $json_str = $2;  # Take only from first '{'
+    }
+
+    my $tracks = eval { decode_json($json_str) };
+
+    if ($@ || !$tracks) {
+        $log->error("yt-dlp failed for $id: $err");
+        $log->error("yt-dlp stdout was: " . substr($tracks_json || '', 0, 200));
+        $errorCb->($@ || "yt-dlp failed: $err");
+        return undef;
+    }
+
+    my $cover = _pick_best_thumbnail($tracks);
+
+    # Select best audio format
+    # Must have: vcodec=none, real acodec (not 'none'), real ext (not 'mhtml'), and a URL
+    my $formats = $tracks->{formats} || [];
+    my @audio_formats = grep {
+        my $f = $_;
+        ($f->{vcodec} || '') eq 'none'
+        && $f->{acodec} && $f->{acodec} ne 'none'
+        && ($f->{ext} || '') ne 'mhtml'
+        && $f->{url}
+    } @$formats;
+
+    if (!@audio_formats) {
+        $log->error("No audio-only formats found for $id, trying any format with audio");
+        # Fallback: any format that has an audio codec and URL
+        @audio_formats = grep { $_->{acodec} && $_->{acodec} ne 'none' && $_->{url} } @$formats;
+    }
+
+    if (!@audio_formats) {
+        $errorCb->("No suitable audio stream found for $id");
+        return undef;
+    }
+
+    # Sort by preference: opus/webm (251) > m4a (140) > then by bitrate
+    my @sorted = sort {
+        my $a_score = _formatScore($a);
+        my $b_score = _formatScore($b);
+        $b_score <=> $a_score;
+    } @audio_formats;
+
+    my $best = $sorted[0];
+
+    $log->info(sprintf("Selected format %s (%s, %skbps) for %s",
+        $best->{format_id} // '?',
+        $best->{ext}       // '?',
+        $best->{abr}       // '?',
+        $id));
+
+    return {
+        url       => $best->{url},
+        format_id => $best->{format_id},
+        ext       => $best->{ext},
+        abr       => $best->{abr},
+        meta      => {
+            title    => $tracks->{title},
+            artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
+            album    => $tracks->{album},
+            duration => $tracks->{duration},
+            cover    => $cover,
+        },
+    };
+}
+
+# Prefetch the next queued track so its stream URL is already resolved by the
+# time LMS asks for it. Runs yt-dlp in the background and stores the result in
+# %_stream_cache. One prefetch at a time — we don't want to stack yt-dlp
+# processes on a Pi Zero.
+sub _prefetch_next {
+    my ($song) = @_;
+
+    return if $_prefetch_in_progress;
+
+    my $client = eval { $song->master() } || eval { $song->client() };
+    return unless $client;
+
+    my $cur_index = eval { Slim::Player::Source::playingSongIndex($client) };
+    return unless defined $cur_index;
+
+    my $next_index = $cur_index + 1;
+    my $count      = eval { Slim::Player::Playlist::count($client) } || 0;
+    return unless $next_index < $count;
+
+    my $next_track = eval { Slim::Player::Playlist::track($client, $next_index) };
+    return unless $next_track;
+
+    my $next_url = eval { $next_track->url } // '';
+    my ($next_id) = $next_url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
+    return unless $next_id;
+
+    # Already cached — nothing to do.
+    return if $_stream_cache{$next_id};
+
+    my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
+    return unless $yt_dlp;
+
+    $_prefetch_in_progress = 1;
+    $log->info("Prefetching next track: $next_id");
+
+    my $yt_url = "https://music.youtube.com/watch?v=$next_id";
+    my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
+               '--js-runtimes', 'quickjs',
+               '--extractor-args', 'youtube:player_client=web,default',
+               '-j', $yt_url);
+
+    my $cookie_raw = $prefs->get('cookie_raw');
+    my $cookie_str = $prefs->get('cookie');
+    if ($cookie_raw || $cookie_str) {
+        my $cookies_file = _write_cookies_file($cookie_raw, $cookie_str);
+        push @cmd, '--cookies', $cookies_file if $cookies_file;
+    }
+
+    my $cv = AnyEvent::Util::run_cmd(
+        \@cmd,
+        '<',  '/dev/null',
+        '>',  \my $tracks_json,
+        '2>', \my $err,
+    );
+
+    $cv->cb(sub {
+        $_prefetch_in_progress = 0;
+        my $resolved = _parse_ytdlp_output($tracks_json, $err, $next_id, sub {
+            my ($msg) = @_;
+            $log->warn("Prefetch failed for $next_id: $msg");
+        });
+        return unless $resolved;
+
+        $_stream_cache{$next_id} = { %$resolved, ts => time() };
+        $log->info("Prefetch ready for $next_id");
+
+        # Also prime the url-keyed metadata cache so the queued next track
+        # shows its real title/cover before it starts playing.
+        require Slim::Utils::Cache;
+        Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $resolved->{meta}, 86400);
     });
 }
 
