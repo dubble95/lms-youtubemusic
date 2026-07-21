@@ -255,13 +255,11 @@ sub _onPlaylistChange {
     my $cur_url  = $cur_song ? ($cur_song->track->url || '') : '';
     my $cur_vid  = _video_id_from_url("$cur_url");
 
-    # Seed case: a new ytmusic track just started AND we haven't seeded from it.
+    # Update seed tracking and reset continuity on a new track play.
     if ($cur_vid && ($state{$cid}{last_seed} || '') ne $cur_vid) {
         $state{$cid}{last_seed} = $cur_vid;
         $state{$cid}{radio_playlist} = undef;   # fresh radio chain per seed
-        $log->info("Radio: seeding from new track $cur_vid");
-        _fetch_and_append($client, $cur_vid, undef);
-        return;
+        $log->info("Radio: seed updated to new track $cur_vid");
     }
 
     # Refill case: queue is running low.

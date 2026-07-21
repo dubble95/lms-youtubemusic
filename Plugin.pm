@@ -515,7 +515,7 @@ sub _playlist_play_item {
     my $play_url = "ytmplaylist://$browse_id";
     my $label    = $title . ($subtitle ? " ($subtitle)" : "");
     return {
-        name  => "▶ $label",
+        name  => "\x{25B6} $label",
         type  => 'audio',
         url   => $play_url,
         play  => $play_url,
