@@ -100,13 +100,6 @@ sub scanUrl {
 sub getNextTrack {
     my ($class, $song, $successCb, $errorCb) = @_;
 
-    my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
-    if (!$yt_dlp) {
-        $log->error("Cannot find yt-dlp binary");
-        $errorCb->("cannot find yt-dlp");
-        return;
-    }
-
     my $url = $song->track()->url;
     my ($id) = $url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
 
@@ -115,82 +108,121 @@ sub getNextTrack {
         return;
     }
 
-    # ── Cache hit: skip yt-dlp entirely ──────────────────────────────────
-    # A prefetched entry lets us return in milliseconds instead of waiting
-    # 10-20s for yt-dlp + the n-challenge solver.
+    my $port = Slim::Utils::Prefs::preferences('server')->get('httpport') || 9000;
+    my $proxy_url = "http://127.0.0.1:$port/plugins/YouTubeMusic/stream?id=$id";
+
+    $song->pluginData(url => $proxy_url);
+
+    # If cached, prime metadata into song
     my $cached = $_stream_cache{$id};
     if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
-        $log->warn("Cache HIT for $id — skipping yt-dlp");
+        $log->warn("Cache HIT for $id — priming metadata");
         _apply_resolved($song, $id, $cached);
-        $successCb->();
-        _prefetch_next($song);
+    } else {
+        # Trigger resolution in background if not already active
+        _resolve_ytdlp($id);
+    }
+
+    $log->warn("getNextTrack: assigned proxy URL $proxy_url for $id — returning instant success");
+    $successCb->();
+    _prefetch_next($song);
+}
+
+sub stream_handler {
+    my ($httpClient, $response) = @_;
+
+    my $uri = $response->request->uri;
+    my %query = $uri->query_form;
+    my $id = $query{id};
+
+    if (!$id) {
+        $log->error("stream_handler: missing id parameter");
+        $response->code(400);
+        $response->content_type('text/plain');
+        $response->content("Missing id parameter");
+        $httpClient->send_response($response);
         return;
     }
-    if ($cached) {
-        # Expired — drop it so we don't reuse a stale URL.
-        delete $_stream_cache{$id};
+
+    $log->warn("stream_handler: request received for track $id");
+
+    my $send_redirect = sub {
+        my ($resolved, $err_msg) = @_;
+        if ($resolved && $resolved->{url}) {
+            $log->warn("stream_handler: redirecting 302 for $id");
+            $response->code(302);
+            $response->header('Location' => $resolved->{url});
+            $response->header('Connection' => 'close');
+            $httpClient->send_response($response);
+        } else {
+            $log->error("stream_handler: failed for $id: " . ($err_msg // 'unknown error'));
+            $response->code(500);
+            $response->content_type('text/plain');
+            $response->header('Connection' => 'close');
+            $response->content("Failed to resolve stream: " . ($err_msg // 'unknown error'));
+            $httpClient->send_response($response);
+        }
+    };
+
+    my $cached = $_stream_cache{$id};
+    if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
+        $log->warn("stream_handler: instant cache HIT for $id");
+        $send_redirect->($cached);
+        return;
     }
 
     if ($_active_resolving{$id}) {
-        $log->warn("Already resolving $id — queueing player callback");
+        $log->warn("stream_handler: $id is resolving — queueing HTTP response callback");
         push @{ $_active_resolving{$id} }, sub {
             my ($resolved, $err_msg) = @_;
-            if ($resolved) {
-                _apply_resolved($song, $id, $resolved);
-                $successCb->();
-                _prefetch_next($song);
-            } else {
-                $errorCb->($err_msg);
-            }
+            $send_redirect->($resolved, $err_msg);
         };
         return;
     }
 
-    $log->warn("Cache MISS for $id — resolving via yt-dlp");
-    $log->info("Using yt-dlp: $yt_dlp");
+    $log->warn("stream_handler: starting cold resolution for $id");
+    _resolve_ytdlp($id, sub {
+        my ($resolved, $err_msg) = @_;
+        $send_redirect->($resolved, $err_msg);
+    });
+}
 
+sub _resolve_ytdlp {
+    my ($id, $callback) = @_;
+
+    $_active_resolving{$id} ||= [];
+    push @{ $_active_resolving{$id} }, $callback if $callback;
+
+    return if scalar(@{ $_active_resolving{$id} }) > 1;
+
+    my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
+    if (!$yt_dlp) {
+        $log->error("Cannot find yt-dlp binary");
+        my $callbacks = delete $_active_resolving{$id} || [];
+        for my $cb (@$callbacks) {
+            eval { $cb->(undef, "cannot find yt-dlp") };
+        }
+        return;
+    }
+
+    $log->warn("Cache MISS for $id — resolving via yt-dlp");
     my $yt_url = "https://music.youtube.com/watch?v=$id";
 
-    # Build yt-dlp command.
-    # --js-runtimes quickjs: enable QuickJS as the JS challenge solver runtime.
-    # Prefer player_client=android,web so yt-dlp tries the fast Android client
-    # first (avoiding QuickJS JS evaluation latency), falling back to web if needed.
     my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
                '--js-runtimes', 'quickjs',
                '--extractor-args', 'youtube:player_client=android,web',
                '-j', $yt_url);
 
-    # Pass cookies via a Netscape cookies.txt file rather than --add-header.
-    # yt-dlp's cookie jar handles domain/path/secure matching and __Secure-/
-    # __Host- semantics correctly per sub-request, which a static header cannot.
-    # Prefer the verbatim cookies.txt the user pasted (cookie_raw pref) since
-    # it preserves the original secure/expiry/domain attributes; fall back to
-    # deriving a Netscape file from the normalized Cookie header otherwise.
-    my $cookie_raw  = $prefs->get('cookie_raw');
-    my $cookie_str  = $prefs->get('cookie');
+    my $cookie_raw = $prefs->get('cookie_raw');
+    my $cookie_str = $prefs->get('cookie');
     if ($cookie_raw || $cookie_str) {
         my $cookies_file = _write_cookies_file($cookie_raw, $cookie_str);
         if ($cookies_file) {
             push @cmd, '--cookies', $cookies_file;
-            $log->info("Passing cookies via --cookies $cookies_file (raw len: " . length($cookie_raw // '0') . ")");
         } elsif ($cookie_str) {
-            # Fallback to header if file write failed.
             push @cmd, '--add-header', "Cookie:$cookie_str";
-            $log->warn("Falling back to --add-header (cookie file write failed)");
         }
     }
-
-    $_active_resolving{$id} = [];
-    push @{ $_active_resolving{$id} }, sub {
-        my ($resolved, $err_msg) = @_;
-        if ($resolved) {
-            _apply_resolved($song, $id, $resolved);
-            $successCb->();
-            _prefetch_next($song);
-        } else {
-            $errorCb->($err_msg);
-        }
-    };
 
     local $ENV{PYTHONWARNINGS} = 'ignore';
     my $cv = AnyEvent::Util::run_cmd(
@@ -208,9 +240,8 @@ sub getNextTrack {
                 eval { $cb->(undef, $msg) };
             }
         });
-        return unless $resolved;  # error callback already invoked
+        return unless $resolved;
 
-        # Store in the in-memory stream cache for future prefetch hits.
         $_stream_cache{$id} = { %$resolved, ts => time() };
 
         my $callbacks = delete $_active_resolving{$id} || [];
@@ -218,6 +249,7 @@ sub getNextTrack {
             eval { $cb->($resolved, undef) };
         }
     });
+}
 }
 
 # Apply an already-resolved stream (from cache or fresh yt-dlp run) to a song:
@@ -413,59 +445,22 @@ sub _prefetch_next {
     return unless $yt_dlp;
 
     $_prefetch_in_progress = 1;
-    $_active_resolving{$next_id} = [];
     $log->warn("Prefetching next track: $next_id");
 
-    my $yt_url = "https://music.youtube.com/watch?v=$next_id";
-    my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
-               '--js-runtimes', 'quickjs',
-               '--extractor-args', 'youtube:player_client=android,web',
-               '-j', $yt_url);
-
-    my $cookie_raw = $prefs->get('cookie_raw');
-    my $cookie_str = $prefs->get('cookie');
-    if ($cookie_raw || $cookie_str) {
-        my $cookies_file = _write_cookies_file($cookie_raw, $cookie_str);
-        push @cmd, '--cookies', $cookies_file if $cookies_file;
-    }
-
-    local $ENV{PYTHONWARNINGS} = 'ignore';
-    my $cv = AnyEvent::Util::run_cmd(
-        \@cmd,
-        '<',  '/dev/null',
-        '>',  \my $tracks_json,
-        '2>', \my $err,
-    );
-
-    $cv->cb(sub {
+    _resolve_ytdlp($next_id, sub {
         $_prefetch_in_progress = 0;
-        my $resolved = _parse_ytdlp_output($tracks_json, $err, $next_id, sub {
-            my ($msg) = @_;
-            $log->warn("Prefetch failed for $next_id: $msg");
-            my $callbacks = delete $_active_resolving{$next_id} || [];
-            for my $cb (@$callbacks) {
-                eval { $cb->(undef, $msg) };
+        my ($resolved, $err_msg) = @_;
+        if ($resolved) {
+            $log->warn("Prefetch ready for $next_id");
+            my $pre_meta = { %{ $resolved->{meta} } };
+            if ($pre_meta->{artist} && $pre_meta->{artist} =~ /,/) {
+                $pre_meta->{artist} = (split(/,/, $pre_meta->{artist}))[0];
+                $pre_meta->{artist} =~ s/^\s+|\s+$//g;
             }
-        });
-        return unless $resolved;
-
-        $_stream_cache{$next_id} = { %$resolved, ts => time() };
-        $log->warn("Prefetch ready for $next_id");
-
-        # Prime the url-keyed metadata cache for the queued next track.
-        # Apply the same comma-cleanup to the artist so the queue shows a
-        # clean name (not the full composer/lyricist credit list).
-        my $pre_meta = { %{ $resolved->{meta} } };
-        if ($pre_meta->{artist} && $pre_meta->{artist} =~ /,/) {
-            $pre_meta->{artist} = (split(/,/, $pre_meta->{artist}))[0];
-            $pre_meta->{artist} =~ s/^\s+|\s+$//g;
-        }
-        require Slim::Utils::Cache;
-        Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $pre_meta, 86400);
-
-        my $callbacks = delete $_active_resolving{$next_id} || [];
-        for my $cb (@$callbacks) {
-            eval { $cb->($resolved, undef) };
+            require Slim::Utils::Cache;
+            Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $pre_meta, 86400);
+        } else {
+            $log->warn("Prefetch failed for $next_id: " . ($err_msg // 'unknown error'));
         }
     });
 }
