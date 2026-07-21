@@ -138,17 +138,36 @@ sub getNextTrack {
             return;
         }
 
-        # Store metadata
+        # Store metadata. Prefer the largest thumbnail from the 'thumbnails'
+        # array for crisp cover art; fall back to the single 'thumbnail' field.
+        my $cover = _pick_best_thumbnail($tracks);
+
         $song->pluginData(metadata => {
             title    => $tracks->{title},
             artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
             album    => $tracks->{album},
             duration => $tracks->{duration},
-            image    => $tracks->{thumbnail},
+            image    => $cover,
         });
 
-        # Set track duration
-        $song->track->secs($tracks->{duration}) if $tracks->{duration};
+        # Set track duration + persist cover URL on the track row so the
+        # artwork shows up for the currently playing item too.
+        eval {
+            $song->track->secs($tracks->{duration}) if $tracks->{duration};
+            $song->track->cover($cover) if $cover && $song->track->can('cover');
+            $song->track->update if $song->track->in_storage;
+        };
+
+        # Also refresh the url-keyed metadata cache so getMetadataFor stays
+        # consistent with what yt-dlp returned (richer than the radio metadata).
+        require Slim::Utils::Cache;
+        Slim::Utils::Cache->new()->set("ytm:meta:" . $song->track()->url, {
+            title    => $tracks->{title},
+            artist   => $tracks->{artist} || $tracks->{uploader} || $tracks->{channel},
+            album    => $tracks->{album},
+            cover    => $cover,
+            duration => $tracks->{duration},
+        }, 86400);
 
         # Select best audio format
         # Must have: vcodec=none, real acodec (not 'none'), real ext (not 'mhtml'), and a URL
@@ -196,6 +215,33 @@ sub getNextTrack {
         $song->pluginData(url => $best->{url});
         $successCb->();
     });
+}
+
+# Pick the largest thumbnail URL from a yt-dlp info dict. yt-dlp exposes
+# 'thumbnails' (array of {url,width,height,...}) and a single 'thumbnail'.
+# Prefer the highest-resolution entry for crisp cover art.
+sub _pick_best_thumbnail {
+    my $tracks = shift;
+    my $best_url;
+    my $best_score = -1;
+
+    my $thumbs = $tracks->{thumbnails};
+    if (ref($thumbs) eq 'ARRAY') {
+        for my $t (@$thumbs) {
+            next unless ref($t) eq 'HASH' && $t->{url};
+            # Prefer entries that look like cover art (not storyboard entries).
+            next if ($t->{url} // '') =~ /_storyboard/i;
+            my $score = ($t->{width} || 0) * ($t->{height} || 0);
+            # Heavily prefer non-preference-resized default URLs.
+            $score += 1_000_000 if ($t->{url} // '') =~ /maxresdefault/;
+            if ($score > $best_score) {
+                $best_score = $score;
+                $best_url   = $t->{url};
+            }
+        }
+    }
+
+    return $best_url || $tracks->{thumbnail} || '';
 }
 
 sub _formatScore {
@@ -320,19 +366,34 @@ sub getMetadataFor {
                     bitrate  => $meta->{bitrate} ? sprintf('%d kbps', $meta->{bitrate} / 1000) : undef,
                     type     => $meta->{type},
                     duration => $meta->{duration},
+                    icon     => $meta->{image},
                 };
             }
         }
     }
 
-    # Fallback to database track metadata if available
+    # Fallback for queued (not-yet-playing) tracks: look up the metadata the
+    # Radio auto-queue stashed in the url-keyed cache, then merge in whatever
+    # the DB track holds (title/secs/cover).
+    require Slim::Utils::Cache;
+    my $cache  = Slim::Utils::Cache->new();
+    my $cached = $cache->get("ytm:meta:$url");
+
     my $track = Slim::Schema->objectForUrl($url);
-    if ($track) {
+
+    if ($cached || $track) {
+        my $title    = ($cached && $cached->{title})    || ($track ? $track->title : undef) || 'YouTube Music';
+        my $artist   = ($cached && $cached->{artist})   || ($track && $track->can('artistName') ? $track->artistName : undef);
+        my $album    = ($cached && $cached->{album})    || ($track && $track->can('albumName') ? $track->albumName : undef);
+        my $duration = ($cached && $cached->{duration}) || ($track ? $track->secs : undef);
+        my $cover    = ($cached && $cached->{cover})    || ($track && $track->can('cover') ? $track->cover : undef);
         return {
-            title    => $track->title,
-            artist   => $track->can('artistName') ? $track->artistName : undef,
-            album    => $track->can('albumName') ? $track->albumName : undef,
-            duration => $track->secs,
+            title    => $title,
+            artist   => $artist,
+            album    => $album,
+            cover    => $cover,
+            icon     => $cover,
+            duration => $duration,
         };
     }
 

@@ -324,12 +324,44 @@ def _convert_search(results):
     }
 
 
+def _parse_length_to_seconds(length):
+    """Convert a "M:SS" or "H:MM:SS" string to integer seconds. Returns None
+    if the input is empty or unparseable."""
+    if not length or not isinstance(length, str):
+        return None
+    parts = length.strip().split(':')
+    try:
+        parts = [int(p) for p in parts]
+    except ValueError:
+        return None
+    if len(parts) == 2:
+        return parts[0] * 60 + parts[1]
+    if len(parts) == 3:
+        return parts[0] * 3600 + parts[1] * 60 + parts[2]
+    return None
+
+
+def _thumb_from_track(t):
+    """get_watch_playlist returns thumbnails under 'thumbnail' (singular,
+    a list of dicts), unlike browse items which use 'thumbnails'. Handle both."""
+    for key in ('thumbnails', 'thumbnail'):
+        thumbs = t.get(key)
+        if isinstance(thumbs, list) and thumbs:
+            # Pick the largest available for crisp artwork.
+            best = max(thumbs, key=lambda x: (x.get('width') or 0) * (x.get('height') or 0))
+            url = best.get('url')
+            if url:
+                return url
+    return ''
+
+
 def _convert_watch_playlist(data):
     """ytmusicapi get_watch_playlist → flat list of tracks (no sections).
 
-    Returns a simple structure that the Perl side can iterate directly to
-    extract videoIds for the play queue:
-        {'tracks': [{'videoId': ..., 'title': ..., 'artist': ...}, ...],
+    Returns a simple structure the Perl side can iterate directly to extract
+    videoIds for the play queue, with full metadata for UI display:
+        {'tracks': [{'videoId', 'title', 'artist', 'album', 'duration',
+                     'thumbnail'}, ...],
          'playlistId': 'RDAMVM...'}
     """
     tracks = []
@@ -342,8 +374,9 @@ def _convert_watch_playlist(data):
             'title':   t.get('title', ''),
             'artist':  _artist_str(t),
             'album':   (t.get('album') or {}).get('name', ''),
-            'duration': t.get('lengthSeconds') or t.get('duration'),
-            'thumbnail': _thumb(t),
+            'duration': t.get('lengthSeconds') or t.get('duration')
+                        or _parse_length_to_seconds(t.get('length')),
+            'thumbnail': _thumb_from_track(t),
         })
     return {
         'tracks':     tracks,

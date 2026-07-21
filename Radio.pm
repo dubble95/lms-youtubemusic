@@ -23,6 +23,7 @@ use warnings;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
+use Slim::Utils::Cache;
 use Slim::Player::Playlist;
 use Slim::Player::Source;
 use Slim::Schema;
@@ -114,6 +115,8 @@ sub _remaining_count {
 
 # Build a Slim::Schema::Track for a ytmusic:// URL (created lazily; the
 # ProtocolHandler's scanUrl/getNextTrack will resolve the stream later).
+# Stash the full radio metadata in pluginData on the track so getMetadataFor
+# can return title/artist/album/cover for queued (not-yet-playing) tracks too.
 sub _track_for_video {
     my ($video_id, $meta) = @_;
     my $url = _ytm_url($video_id);
@@ -125,14 +128,31 @@ sub _track_for_video {
     }
     return $track unless $track && $meta;
 
-    # Populate metadata so the player UI shows title/duration immediately,
-    # before yt-dlp resolves the stream. Artist/album are foreign-key rows;
-    # ProtocolHandler's getMetadataFor fills those from pluginData at play.
     eval {
-        $track->title($meta->{title})   if $meta->{title}   && $track->can('title');
+        $track->title($meta->{title})   if $meta->{title}    && $track->can('title');
         $track->secs($meta->{duration}) if $meta->{duration} && $track->can('secs');
+        # Store the cover-art URL on the track so LMS artwork resolution finds
+        # it via getMetadataFor's fallback for queued tracks.
+        if ($meta->{thumbnail} && $track->can('cover')) {
+            $track->cover($meta->{thumbnail});
+        }
         $track->update if $track->in_storage;
     };
+
+    # Also stash artist/album in the track's pluginData namespace so the
+    # metadata fallback can surface them without DB foreign-key rows.
+    # We attach it to the track's url-scoped cache to survive across requests.
+    if ($meta->{artist} || $meta->{album}) {
+        my $cache = Slim::Utils::Cache->new();
+        $cache->set("ytm:meta:$url", {
+            artist => $meta->{artist} || '',
+            album  => $meta->{album}  || '',
+            title  => $meta->{title}  || '',
+            cover  => $meta->{thumbnail} || '',
+            duration => $meta->{duration},
+        }, 86400);
+    }
+
     return $track;
 }
 
