@@ -60,28 +60,11 @@ sub new {
     return $class->SUPER::new($args);
 }
 
-sub formatOverride {
-    my ($class, $song) = @_;
-    my $meta = $song->pluginData('metadata') || {};
+sub getFormatForURL {
+    my ($class, $url) = @_;
+    my $song = Slim::Player::Playlist::song($url);
+    my $meta = $song ? $song->pluginData('metadata') : {};
     return $meta->{type} || 'aac';
-}
-
-sub canDirectStream {
-    my ($class, $client, $url) = @_;
-    $log->warn("canDirectStream checked for url: $url - returning 0");
-    return 0;
-}
-
-sub canDirectStreamSong {
-    my ($class, $client, $song) = @_;
-    $log->warn("canDirectStreamSong checked - returning 0");
-    return 0;
-}
-
-sub forceTranscode {
-    my ($class, $client, $format) = @_;
-    $log->warn("forceTranscode checked for format: $format - returning 1");
-    return 1;
 }
 
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
