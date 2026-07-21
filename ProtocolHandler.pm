@@ -109,7 +109,7 @@ sub getNextTrack {
     }
 
     my $port = Slim::Utils::Prefs::preferences('server')->get('httpport') || 9000;
-    my $proxy_url = "http://127.0.0.1:$port/plugins/YouTubeMusic/stream?id=$id";
+    my $proxy_url = "http://127.0.0.1:$port/plugins/YouTubeMusic/stream?id=$id&ext=.mp4";
 
     $song->pluginData(url => $proxy_url);
 
