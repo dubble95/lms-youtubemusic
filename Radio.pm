@@ -239,6 +239,7 @@ sub _fetch_and_append {
 sub _onPlaylistChange {
     my $request = shift;
     my $client  = $request->client() or return;
+    return unless ref($client) && UNIVERSAL::isa($client, 'Slim::Player::Client');
 
     # Only act when the queue is (or recently became) ours.
     return unless _queue_is_ours($client);
