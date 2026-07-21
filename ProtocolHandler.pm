@@ -348,8 +348,17 @@ sub _prefetch_next {
     my ($next_id) = $next_url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
     return unless $next_id;
 
-    # Already cached — nothing to do.
+    # Already cached or currently being fetched — nothing to do.
     return if $_stream_cache{$next_id};
+    # Guard against fetching the same ID as the *current* track being resolved.
+    # getNextTrack() may still be running when we are called from its callback;
+    # comparing IDs prevents two concurrent yt-dlp processes for the same video.
+    my $cur_url = eval { $song->track->url } // '';
+    my ($cur_id) = $cur_url =~ /ytmusic:\/\/([a-zA-Z0-9_\-]+)/;
+    if ($cur_id && $cur_id eq $next_id) {
+        $log->info("Prefetch skipped: next_id == cur_id ($next_id)");
+        return;
+    }
 
     my $yt_dlp = Plugins::YouTubeMusic::Utils::yt_dlp_bin();
     return unless $yt_dlp;
@@ -388,10 +397,16 @@ sub _prefetch_next {
         $_stream_cache{$next_id} = { %$resolved, ts => time() };
         $log->info("Prefetch ready for $next_id");
 
-        # Also prime the url-keyed metadata cache so the queued next track
-        # shows its real title/cover before it starts playing.
+        # Prime the url-keyed metadata cache for the queued next track.
+        # Apply the same comma-cleanup to the artist so the queue shows a
+        # clean name (not the full composer/lyricist credit list).
+        my $pre_meta = { %{ $resolved->{meta} } };
+        if ($pre_meta->{artist} && $pre_meta->{artist} =~ /,/) {
+            $pre_meta->{artist} = (split(/,/, $pre_meta->{artist}))[0];
+            $pre_meta->{artist} =~ s/^\s+|\s+$//g;
+        }
         require Slim::Utils::Cache;
-        Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $resolved->{meta}, 86400);
+        Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $pre_meta, 86400);
     });
 }
 
