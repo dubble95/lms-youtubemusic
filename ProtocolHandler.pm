@@ -250,7 +250,6 @@ sub _resolve_ytdlp {
         }
     });
 }
-}
 
 # Apply an already-resolved stream (from cache or fresh yt-dlp run) to a song:
 # write pluginData, persist track metadata, refresh the url-keyed cache used
