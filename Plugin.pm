@@ -9,6 +9,7 @@ use Slim::Utils::Prefs;
 use Plugins::YouTubeMusic::Auth;
 use Plugins::YouTubeMusic::API;
 use Plugins::YouTubeMusic::ProtocolHandler;
+use Plugins::YouTubeMusic::PlaylistProtocolHandler;
 use Plugins::YouTubeMusic::Radio;
 
 my $log = Slim::Utils::Log->addLogCategory({
@@ -236,7 +237,7 @@ sub _parseInnerTube {
             if ($videoId) {
                 push @items, { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'audio', url => "ytmusic://$videoId", image => $thumb };
             } elsif ($browseId) {
-                push @items, { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], image => $thumb };
+                push @items, { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
             }
 
             # Also parse shelf contents inside card (if any)
@@ -341,11 +342,11 @@ sub _parseListItem {
         if ($videoId) {
             return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'audio', url => "ytmusic://$videoId", image => $thumb };
         }
-        
+
         $browseId ||= "VL" . $playlistId if $playlistId;
 
         if ($browseId) {
-            return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], image => $thumb };
+            return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
         }
         return undef;
     }
@@ -395,11 +396,11 @@ sub _parseListItem {
     if ($videoId) {
         return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'audio', url => "ytmusic://$videoId", image => $thumb };
     }
-    
+
     $browseId ||= "VL" . $playlistId if $playlistId;
 
     if ($browseId) {
-        return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], image => $thumb };
+        return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
     }
     return undef;
 }
