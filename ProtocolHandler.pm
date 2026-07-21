@@ -21,6 +21,7 @@ my $_stream_cache_ttl = 1800;  # 30 minutes
 
 # Guard against prefetch storms: one outstanding prefetch at a time.
 my $_prefetch_in_progress = 0;
+my %_active_resolving;
 
 # Register the protocol handler
 Slim::Player::ProtocolHandlers->registerHandler('ytmusic', __PACKAGE__);
@@ -120,6 +121,21 @@ sub getNextTrack {
         delete $_stream_cache{$id};
     }
 
+    if ($_active_resolving{$id}) {
+        $log->info("Already resolving $id — queueing player callback");
+        push @{ $_active_resolving{$id} }, sub {
+            my ($resolved, $err_msg) = @_;
+            if ($resolved) {
+                _apply_resolved($song, $id, $resolved);
+                $successCb->();
+                _prefetch_next($song);
+            } else {
+                $errorCb->($err_msg);
+            }
+        };
+        return;
+    }
+
     $log->info("Cache MISS for $id — resolving via yt-dlp");
     $log->info("Using yt-dlp: $yt_dlp");
 
@@ -158,6 +174,18 @@ sub getNextTrack {
         }
     }
 
+    $_active_resolving{$id} = [];
+    push @{ $_active_resolving{$id} }, sub {
+        my ($resolved, $err_msg) = @_;
+        if ($resolved) {
+            _apply_resolved($song, $id, $resolved);
+            $successCb->();
+            _prefetch_next($song);
+        } else {
+            $errorCb->($err_msg);
+        }
+    };
+
     my $cv = AnyEvent::Util::run_cmd(
         \@cmd,
         "<",  "/dev/null",
@@ -166,15 +194,22 @@ sub getNextTrack {
     );
 
     $cv->cb(sub {
-        my $resolved = _parse_ytdlp_output($tracks_json, $err, $id, $errorCb);
+        my $resolved = _parse_ytdlp_output($tracks_json, $err, $id, sub {
+            my ($msg) = @_;
+            my $callbacks = delete $_active_resolving{$id} || [];
+            for my $cb (@$callbacks) {
+                eval { $cb->(undef, $msg) };
+            }
+        });
         return unless $resolved;  # error callback already invoked
 
         # Store in the in-memory stream cache for future prefetch hits.
         $_stream_cache{$id} = { %$resolved, ts => time() };
 
-        _apply_resolved($song, $id, $resolved);
-        $successCb->();
-        _prefetch_next($song);
+        my $callbacks = delete $_active_resolving{$id} || [];
+        for my $cb (@$callbacks) {
+            eval { $cb->($resolved, undef) };
+        }
     });
 }
 
@@ -356,7 +391,7 @@ sub _prefetch_next {
     return unless $next_id;
 
     # Already cached or currently being fetched — nothing to do.
-    return if $_stream_cache{$next_id};
+    return if $_stream_cache{$next_id} || $_active_resolving{$next_id};
     # Guard against fetching the same ID as the *current* track being resolved.
     # getNextTrack() may still be running when we are called from its callback;
     # comparing IDs prevents two concurrent yt-dlp processes for the same video.
@@ -371,6 +406,7 @@ sub _prefetch_next {
     return unless $yt_dlp;
 
     $_prefetch_in_progress = 1;
+    $_active_resolving{$next_id} = [];
     $log->info("Prefetching next track: $next_id");
 
     my $yt_url = "https://music.youtube.com/watch?v=$next_id";
@@ -398,6 +434,10 @@ sub _prefetch_next {
         my $resolved = _parse_ytdlp_output($tracks_json, $err, $next_id, sub {
             my ($msg) = @_;
             $log->warn("Prefetch failed for $next_id: $msg");
+            my $callbacks = delete $_active_resolving{$next_id} || [];
+            for my $cb (@$callbacks) {
+                eval { $cb->(undef, $msg) };
+            }
         });
         return unless $resolved;
 
@@ -414,6 +454,11 @@ sub _prefetch_next {
         }
         require Slim::Utils::Cache;
         Slim::Utils::Cache->new()->set("ytm:meta:$next_url", $pre_meta, 86400);
+
+        my $callbacks = delete $_active_resolving{$next_id} || [];
+        for my $cb (@$callbacks) {
+            eval { $cb->($resolved, undef) };
+        }
     });
 }
 
