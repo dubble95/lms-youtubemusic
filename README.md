@@ -12,6 +12,20 @@ Browse and play music from YouTube Music on your Lyrion Music Server (LMS, forme
 
 ## Installation
 
+### Option A — via LMS plugin directory (recommended)
+
+1. In the LMS web UI go to **Settings → Plugins**.
+2. At the bottom, add this URL to the **Additional Repositories** box:
+   ```
+   https://raw.githubusercontent.com/dubble95/lms-youtubemusic/main/public.xml
+   ```
+3. Click **Apply**. "YouTube Music" will appear in the plugin list — enable it.
+4. Restart LMS when prompted.
+
+After future updates, bumping the version in `public.xml` will let users upgrade via **Settings → Plugins** without touching files.
+
+### Option B — manual install
+
 1. Download or clone this repository.
 2. Copy the `YouTubeMusic` directory into your LMS `Plugins` directory.
    - Linux: typically `/var/lib/squeezeboxserver/Plugins`
@@ -154,3 +168,7 @@ Without this setup, only public videos will play; Premium music tracks will be s
 - Based on the `philippe44/LMS-YouTube` plugin architecture
 - Uses `yt-dlp` for media extraction
 - Uses `ytmusicapi` for API calls
+
+## License
+
+Released under the [MIT License](LICENSE).

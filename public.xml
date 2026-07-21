@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extensions>
+  <plugins>
+    <plugin name="YouTubeMusic" category="musicservices" creator="dubble95" email="" link="https://github.com/dubble95/lms-youtubemusic" maxTarget="*" minTarget="8.0" sha="1f00592913a5f37b8a7f7029b2fcc827276b2676" url="https://raw.githubusercontent.com/dubble95/lms-youtubemusic/main/releases/YouTubeMusic-1.0.0.zip" version="1.0.0">
+      <desc lang="EN">Browse and play music from YouTube Music. Supports search, home, library, charts, album/playlist browsing, endless recommended-tracks radio, cover art/metadata, and cookie-based authentication. Premium tracks require a JS runtime (QuickJS or Node) for yt-dlp.</desc>
+      <title lang="EN">YouTube Music</title>
+    </plugin>
+  </plugins>
+</extensions>
