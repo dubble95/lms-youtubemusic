@@ -179,9 +179,27 @@ sub _apply_resolved {
 
     my $meta = $resolved->{meta};
 
+    # yt-dlp's 'artist' field on YouTube Music pages contains the full song
+    # credit list (composers, lyricists, ...), not just the performing artist.
+    # If the radio/playlist code already primed a clean artist in the url cache,
+    # prefer that. Otherwise fall back to the first comma-separated entry of
+    # the yt-dlp value to at least drop the credit noise.
+    my $track_url = $song->track()->url;
+    require Slim::Utils::Cache;
+    my $cache      = Slim::Utils::Cache->new();
+    my $cached_meta = $cache->get("ytm:meta:$track_url");
+
+    my $artist = $meta->{artist};
+    if ($cached_meta && $cached_meta->{artist}) {
+        $artist = $cached_meta->{artist};
+    } elsif ($artist && $artist =~ /,/) {
+        $artist = (split(/,/, $artist))[0];
+        $artist =~ s/^\s+|\s+$//g;
+    }
+
     $song->pluginData(metadata => {
         title    => $meta->{title},
-        artist   => $meta->{artist},
+        artist   => $artist,
         album    => $meta->{album},
         duration => $meta->{duration},
         image    => $meta->{cover},
@@ -197,12 +215,11 @@ sub _apply_resolved {
         $song->track->update if $song->track->in_storage;
     };
 
-    # Also refresh the url-keyed metadata cache so getMetadataFor stays
-    # consistent with what yt-dlp returned (richer than the radio metadata).
-    require Slim::Utils::Cache;
-    Slim::Utils::Cache->new()->set("ytm:meta:" . $song->track()->url, {
+    # Refresh the url-keyed metadata cache so getMetadataFor stays consistent.
+    # Use the cleaned artist here too.
+    $cache->set("ytm:meta:$track_url", {
         title    => $meta->{title},
-        artist   => $meta->{artist},
+        artist   => $artist,
         album    => $meta->{album},
         cover    => $meta->{cover},
         duration => $meta->{duration},

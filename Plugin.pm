@@ -104,8 +104,8 @@ sub handleFeed {
             passthrough => [ { browseId => 'FEmusic_library_library' } ],
         },
     ];
-    
-    $cb->($items);
+
+    $cb->({ items => $items });
 }
 
 sub handleSearch {
@@ -118,21 +118,21 @@ sub handleSearch {
         my $result = shift;
         
         if ($result->{error}) {
-            $cb->([{ name => "Error: " . $result->{error}, type => 'text' }]);
+            $cb->({ items => [{ name => "Error: " . $result->{error}, type => 'text' }] });
             return;
         }
-        
+
         my $items;
         eval {
             $items = _parseInnerTube($result);
         };
         if ($@) {
             $log->error("Error parsing search response: $@");
-            $cb->([{ name => "Parsing Error", type => 'text' }]);
+            $cb->({ items => [{ name => "Parsing Error", type => 'text' }] });
             return;
         }
-        
-        $cb->($items);
+
+        $cb->({ items => $items });
     }, $query);
 }
 
@@ -147,23 +147,23 @@ sub handleBrowse {
         
         if ($result->{error}) {
             $log->warn("handleBrowse API error: $result->{error}");
-            $cb->([{ name => "Error: " . $result->{error}, type => 'text' }]);
+            $cb->({ items => [{ name => "Error: " . $result->{error}, type => 'text' }] });
             return;
         }
-        
+
         my $items;
         eval {
             $items = _parseInnerTube($result);
         };
         if ($@) {
             $log->error("Error parsing browse response: $@");
-            $cb->([{ name => "Parsing Error", type => 'text' }]);
+            $cb->({ items => [{ name => "Parsing Error", type => 'text' }] });
             return;
         }
-        
+
         $log->warn("handleBrowse returning " . scalar(@$items) . " items");
-        
-        $cb->($items);
+
+        $cb->({ items => $items });
     }, $browseId);
 }
 
@@ -237,7 +237,8 @@ sub _parseInnerTube {
             if ($videoId) {
                 push @items, { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'audio', url => "ytmusic://$videoId", image => $thumb };
             } elsif ($browseId) {
-                push @items, { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
+                push @items, _playlist_item($title, $subtitle, $browseId, $thumb);
+                push @items, _playlist_play_item($title, $subtitle, $browseId, $thumb);
             }
 
             # Also parse shelf contents inside card (if any)
@@ -346,7 +347,7 @@ sub _parseListItem {
         $browseId ||= "VL" . $playlistId if $playlistId;
 
         if ($browseId) {
-            return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
+            return _playlist_play_item($title, $subtitle, $browseId, $thumb);
         }
         return undef;
     }
@@ -400,7 +401,7 @@ sub _parseListItem {
     $browseId ||= "VL" . $playlistId if $playlistId;
 
     if ($browseId) {
-        return { name => $title . ($subtitle ? " ($subtitle)" : ""), type => 'outline', url => \&handleBrowse, passthrough => [{ browseId => $browseId }], play => "ytmplaylist://$browseId", image => $thumb };
+        return _playlist_play_item($title, $subtitle, $browseId, $thumb);
     }
     return undef;
 }
@@ -485,6 +486,41 @@ sub _findPlaylistId {
     }
 
     return undef;
+}
+
+# Build a single playlist/album browse item. Because OPMLBased + XMLBrowser
+# will not synthesize a Play action for sub-menu items, we make the item
+# itself playable: type 'audio' with url=play= the ytmplaylist:// URL.
+# Tapping it queues the whole playlist via PlaylistProtocolHandler. The
+# folder/browsing path is preserved as a separate outline item emitted by
+# the caller when it wants both.
+sub _playlist_item {
+    my ($title, $subtitle, $browse_id, $thumb) = @_;
+    my $play_url = "ytmplaylist://$browse_id";
+    my $label    = $title . ($subtitle ? " ($subtitle)" : "");
+    return {
+        name  => $label,
+        type  => 'outline',
+        url   => \&handleBrowse,
+        passthrough => [{ browseId => $browse_id }],
+        play  => $play_url,
+        image => $thumb,
+    };
+}
+
+# A companion to _playlist_item: a dedicated Play entry (type 'audio') that
+# Material Skin will render with a play button / context-menu Play.
+sub _playlist_play_item {
+    my ($title, $subtitle, $browse_id, $thumb) = @_;
+    my $play_url = "ytmplaylist://$browse_id";
+    my $label    = $title . ($subtitle ? " ($subtitle)" : "");
+    return {
+        name  => "▶ $label",
+        type  => 'audio',
+        url   => $play_url,
+        play  => $play_url,
+        image => $thumb,
+    };
 }
 
 sub _getText {
