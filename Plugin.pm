@@ -36,9 +36,6 @@ sub initPlugin {
         Plugins::YouTubeMusic::Settings->new();
     }
 
-    require Slim::Web::Pages;
-    Slim::Web::Pages->addRawFunction('plugins/YouTubeMusic/stream', \&Plugins::YouTubeMusic::ProtocolHandler::stream_handler);
-
     # Automatically disable raw pass-through for aac and mp4 to force Lyrion to transcode them
     # (since raw AAC direct stream/pass-through causes decoder errors on squeezelite)
     my $serverPrefs = Slim::Utils::Prefs::preferences('server');

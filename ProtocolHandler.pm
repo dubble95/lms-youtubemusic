@@ -108,82 +108,29 @@ sub getNextTrack {
         return;
     }
 
-    my $port = Slim::Utils::Prefs::preferences('server')->get('httpport') || 9000;
-    my $proxy_url = "http://127.0.0.1:$port/plugins/YouTubeMusic/stream?id=$id&ext=.mp4";
-
-    $song->pluginData(url => $proxy_url);
-
-    # If cached, prime metadata into song
+    # 1. Cache HIT
     my $cached = $_stream_cache{$id};
     if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
-        $log->warn("Cache HIT for $id — priming metadata");
+        $log->warn("getNextTrack: Cache HIT for $id — instant success");
         _apply_resolved($song, $id, $cached);
-    } else {
-        # Trigger resolution in background if not already active
-        _resolve_ytdlp($id);
-    }
-
-    $log->warn("getNextTrack: assigned proxy URL $proxy_url for $id — returning instant success");
-    $successCb->();
-    _prefetch_next($song);
-}
-
-sub stream_handler {
-    my ($httpClient, $response) = @_;
-
-    my $uri = $response->request->uri;
-    my %query = $uri->query_form;
-    my $id = $query{id};
-
-    if (!$id) {
-        $log->error("stream_handler: missing id parameter");
-        $response->code(400);
-        $response->content_type('text/plain');
-        $response->content("Missing id parameter");
-        $httpClient->send_response($response);
+        $successCb->();
+        _prefetch_next($song);
         return;
     }
 
-    $log->warn("stream_handler: request received for track $id");
-
-    my $send_redirect = sub {
-        my ($resolved, $err_msg) = @_;
-        if ($resolved && $resolved->{url}) {
-            $log->warn("stream_handler: redirecting 302 for $id");
-            $response->code(302);
-            $response->header('Location' => $resolved->{url});
-            $response->header('Connection' => 'close');
-            $httpClient->send_response($response);
-        } else {
-            $log->error("stream_handler: failed for $id: " . ($err_msg // 'unknown error'));
-            $response->code(500);
-            $response->content_type('text/plain');
-            $response->header('Connection' => 'close');
-            $response->content("Failed to resolve stream: " . ($err_msg // 'unknown error'));
-            $httpClient->send_response($response);
-        }
-    };
-
-    my $cached = $_stream_cache{$id};
-    if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
-        $log->warn("stream_handler: instant cache HIT for $id");
-        $send_redirect->($cached);
-        return;
-    }
-
-    if ($_active_resolving{$id}) {
-        $log->warn("stream_handler: $id is resolving — queueing HTTP response callback");
-        push @{ $_active_resolving{$id} }, sub {
-            my ($resolved, $err_msg) = @_;
-            $send_redirect->($resolved, $err_msg);
-        };
-        return;
-    }
-
-    $log->warn("stream_handler: starting cold resolution for $id");
+    # 2. Cache MISS or actively resolving
+    $log->warn("getNextTrack: Cache MISS for $id — resolving via yt-dlp");
     _resolve_ytdlp($id, sub {
         my ($resolved, $err_msg) = @_;
-        $send_redirect->($resolved, $err_msg);
+        if ($resolved) {
+            $log->warn("getNextTrack: Resolution succeeded for $id");
+            _apply_resolved($song, $id, $resolved);
+            $successCb->();
+            _prefetch_next($song);
+        } else {
+            $log->error("getNextTrack: Resolution failed for $id: " . ($err_msg // 'unknown error'));
+            $errorCb->($err_msg // "yt-dlp resolution failed");
+        }
     });
 }
 
