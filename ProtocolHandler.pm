@@ -30,6 +30,16 @@ sub isRemote         { return 1; }
 sub contentType      { return 'aac'; }  # fallback, overridden per-track
 sub getFormatForURL  { return 'aac'; }  # tells LMS to treat as audio stream
 
+sub streamUrl {
+    my ($class, $song) = @_;
+    return unless ref $song;
+    my $url = $song->pluginData('url');
+    if ($url && $url !~ /[&?]range=/) {
+        $url .= ($url =~ /\?/ ? '&' : '?') . 'range=0-999999999';
+    }
+    return $url || $song->track()->url;
+}
+
 sub new {
     my ($class, $args) = @_;
     my $song = $args->{song};
