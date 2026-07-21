@@ -69,6 +69,14 @@ sub getFormatForURL {
     return 'aac';
 }
 
+sub canDirectStream {
+    return 0;
+}
+
+sub canDirectStreamSong {
+    return 0;
+}
+
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
 # to fetch ytmusic:// as an HTTP URL. Just pass the track back immediately.
 sub scanUrl {
