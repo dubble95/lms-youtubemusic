@@ -35,12 +35,13 @@ sub new {
     
     my $url = $song->pluginData('url');
     if ($url) {
-        # YouTube CDN returns a 'clen' (Content-Length) parameter that limits
-        # each response to a small chunk (~3-4 MB). Removing it causes the CDN
-        # to serve the full audio file in one response, preventing LMS from
-        # treating the chunk boundary as end-of-stream (which caused the
-        # "stuck at 2:30 and looping" bug).
-        $url =~ s/[&?]clen=[^&]*//;
+        # Do NOT strip 'clen' because it is cryptographically signed in 'sparams'.
+        # Instead, append 'range=0-999999999' which is unsigned. This forces the
+        # YouTube CDN to return the entire file in a single request, preventing
+        # premature stream end / chunk truncation (e.g. the 2:32 looping bug).
+        if ($url !~ /[&?]range=/) {
+            $url .= ($url =~ /\?/ ? '&' : '?') . 'range=0-999999999';
+        }
         $args->{url} = $url;
         $log->info("Redirecting RemoteStream URL to: $url");
     }
