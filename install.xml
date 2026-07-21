@@ -8,6 +8,7 @@
   <creator>Gemini CLI</creator>
   <email></email>
   <homepage></homepage>
+  <icon>plugins/YouTubeMusic/html/images/icon_50x50.png</icon>
   <optionsURL>plugins/YouTubeMusic/settings/basic.html</optionsURL>
   <targetApplication>
     <maxVersion>*</maxVersion>
