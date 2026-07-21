@@ -92,8 +92,18 @@ sub getNextTrack {
     my $yt_url = "https://music.youtube.com/watch?v=$id";
     $log->info("Getting track info for: $yt_url");
 
-    # Build yt-dlp command
-    my @cmd = ($yt_dlp, '--no-warnings', '--quiet', '--extractor-args', 'youtube:player_client=web,default', '-j', $yt_url);
+    # Build yt-dlp command.
+    # --js-runtimes quickjs: enable QuickJS as the JS challenge solver runtime.
+    # Since ~2025 YouTube forces SABR streaming on the web client and yt-dlp
+    # needs a JS runtime + the yt-dlp-ejs solver package to unmask audio
+    # formats. QuickJS is preferred over Node here because it is ~5MB vs Node's
+    # ~90MB, using far less RAM — important on memory-constrained devices like
+    # a Raspberry Pi Zero. Requires the yt-dlp-ejs pip package on the host and
+    # the `qjs` binary on PATH (build from https://bellard.org/quickjs/).
+    my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
+               '--js-runtimes', 'quickjs',
+               '--extractor-args', 'youtube:player_client=web,default',
+               '-j', $yt_url);
 
     # Pass cookies via a Netscape cookies.txt file rather than --add-header.
     # yt-dlp's cookie jar handles domain/path/secure matching and __Secure-/

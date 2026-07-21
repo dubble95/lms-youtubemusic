@@ -98,6 +98,45 @@ Browse and play music from YouTube Music on your Lyrion Music Server.
 - 시스템 `yt-dlp` (권장, 자동 감지됨) 또는 플러그인에 포함된 `Bin/yt-dlp_*` 바이너리
 - Python 3 + `ytmusicapi` (API 호출용)
 
+### Premium 음악 재생을 위한 추가 요구사항 (중요)
+
+2025년 말부터 YouTube가 **SABR 스트리밍 + JS challenge(n-challenge)**를 강제하여, Premium 전용 음악 트랙을 재생하려면 **JS 런타임과 EJS challenge solver**가 필요합니다. 공개 영상만 재생한다면 이 설정 없이도 동작하지만, YouTube Music의 음악 전용 트랙(대부분의 곡)을 듣으려면 아래 설치가 필요합니다.
+
+**권장: QuickJS 사용** (Raspberry Pi 등 메모리 제약 환경에 특히 적합)
+
+QuickJS는 ~5MB 바이너리로 Node(~90MB)의 1/18 메모리만 쓰므로, Pi Zero 2 W 같은 저메모리 기기에서 안정적입니다.
+
+```bash
+# 1. QuickJS 소스 컴파일 (gcc 필요)
+sudo apt-get install -y gcc make
+cd /tmp
+wget https://github.com/bellard/quickjs/archive/refs/heads/master.tar.gz -O qjs.tar.gz
+tar xzf qjs.tar.gz
+cd quickjs-master
+
+# armv7l(32비트 Pi)에서는 -latomic 추가 필요
+sed -i 's/^LIBS=-lm -lpthread/LIBS=-lm -lpthread -latomic/' Makefile
+sed -i 's/HOST_LIBS=-lm -ldl -lpthread/HOST_LIBS=-lm -ldl -lpthread -latomic/' Makefile
+
+make qjs
+sudo cp qjs /usr/local/bin/qjs
+sudo chmod 755 /usr/local/bin/qjs
+qjs -e "console.log(42)"  # 42 출력 확인
+
+# 2. yt-dlp-ejs (challenge solver) 설치
+sudo pip3 install -U yt-dlp-ejs
+
+# 3. 확인
+yt-dlp --js-runtimes quickjs --verbose --list-formats "https://music.youtube.com/watch?v=<videoId>"
+# 다음이 보이면 정상:
+#   [debug] JS runtimes: quickjs-<version>
+#   [debug] [youtube] [jsc] JS Challenge Providers: ... quickjs
+```
+
+> **대안: Node.js 22 이상** — QuickJS 컴파일이 어려운 x86_64/aarch64 환경에서는 Node 22 이상을 설치하고 `/usr/local/bin/node`로 접근 가능하게 하면 됩니다. 단, Pi Zero 2 W(422MB RAM)에서는 Node의 메모리 사용량이 과도해 QuickJS를 권장합니다. 플러그인의 `ProtocolHandler.pm`에서 `--js-runtimes quickjs`를 `--js-runtimes node`로 변경하면 됩니다.
+
+설치하지 않으면 공개 영상만 재생되고 Premium 음악 트랙은 "Requested format is not available" 에러로 스킵됩니다.
+
 ## 파일 구조 (주요 파일)
 
 | 파일 | 역할 |
