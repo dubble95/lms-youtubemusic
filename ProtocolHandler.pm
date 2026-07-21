@@ -110,7 +110,7 @@ sub getNextTrack {
     # 10-20s for yt-dlp + the n-challenge solver.
     my $cached = $_stream_cache{$id};
     if ($cached && (time() - ($cached->{ts} || 0) < $_stream_cache_ttl)) {
-        $log->info("Cache HIT for $id — skipping yt-dlp");
+        $log->warn("Cache HIT for $id — skipping yt-dlp");
         _apply_resolved($song, $id, $cached);
         $successCb->();
         _prefetch_next($song);
@@ -122,7 +122,7 @@ sub getNextTrack {
     }
 
     if ($_active_resolving{$id}) {
-        $log->info("Already resolving $id — queueing player callback");
+        $log->warn("Already resolving $id — queueing player callback");
         push @{ $_active_resolving{$id} }, sub {
             my ($resolved, $err_msg) = @_;
             if ($resolved) {
@@ -136,22 +136,18 @@ sub getNextTrack {
         return;
     }
 
-    $log->info("Cache MISS for $id — resolving via yt-dlp");
+    $log->warn("Cache MISS for $id — resolving via yt-dlp");
     $log->info("Using yt-dlp: $yt_dlp");
 
     my $yt_url = "https://music.youtube.com/watch?v=$id";
 
     # Build yt-dlp command.
     # --js-runtimes quickjs: enable QuickJS as the JS challenge solver runtime.
-    # Since ~2025 YouTube forces SABR streaming on the web client and yt-dlp
-    # needs a JS runtime + the yt-dlp-ejs solver package to unmask audio
-    # formats. QuickJS is preferred over Node here because it is ~5MB vs Node's
-    # ~90MB, using far less RAM — important on memory-constrained devices like
-    # a Raspberry Pi Zero. Requires the yt-dlp-ejs pip package on the host and
-    # the `qjs` binary on PATH (build from https://bellard.org/quickjs/).
+    # Prefer player_client=android,web so yt-dlp tries the fast Android client
+    # first (avoiding QuickJS JS evaluation latency), falling back to web if needed.
     my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
                '--js-runtimes', 'quickjs',
-               '--extractor-args', 'youtube:player_client=web,default',
+               '--extractor-args', 'youtube:player_client=android,web',
                '-j', $yt_url);
 
     # Pass cookies via a Netscape cookies.txt file rather than --add-header.
@@ -186,6 +182,7 @@ sub getNextTrack {
         }
     };
 
+    local $ENV{PYTHONWARNINGS} = 'ignore';
     my $cv = AnyEvent::Util::run_cmd(
         \@cmd,
         "<",  "/dev/null",
@@ -270,7 +267,7 @@ sub _apply_resolved {
 
     $song->pluginData(url => $resolved->{url});
 
-    $log->info(sprintf("Resolved %s -> format %s (%s, %skbps)",
+    $log->warn(sprintf("Resolved %s -> format %s (%s, %skbps)",
         $id, $resolved->{format_id} // '?',
         $resolved->{ext} // '?', $resolved->{abr} // '?'));
 }
@@ -329,7 +326,7 @@ sub _parse_ytdlp_output {
 
     my $best = $sorted[0];
 
-    $log->info(sprintf("Selected format %s (%s, %skbps) for %s",
+    $log->warn(sprintf("Selected format %s (%s, %skbps) for %s",
         $best->{format_id} // '?',
         $best->{ext}       // '?',
         $best->{abr}       // '?',
@@ -407,12 +404,12 @@ sub _prefetch_next {
 
     $_prefetch_in_progress = 1;
     $_active_resolving{$next_id} = [];
-    $log->info("Prefetching next track: $next_id");
+    $log->warn("Prefetching next track: $next_id");
 
     my $yt_url = "https://music.youtube.com/watch?v=$next_id";
     my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
                '--js-runtimes', 'quickjs',
-               '--extractor-args', 'youtube:player_client=web,default',
+               '--extractor-args', 'youtube:player_client=android,web',
                '-j', $yt_url);
 
     my $cookie_raw = $prefs->get('cookie_raw');
@@ -422,6 +419,7 @@ sub _prefetch_next {
         push @cmd, '--cookies', $cookies_file if $cookies_file;
     }
 
+    local $ENV{PYTHONWARNINGS} = 'ignore';
     my $cv = AnyEvent::Util::run_cmd(
         \@cmd,
         '<',  '/dev/null',
@@ -442,7 +440,7 @@ sub _prefetch_next {
         return unless $resolved;
 
         $_stream_cache{$next_id} = { %$resolved, ts => time() };
-        $log->info("Prefetch ready for $next_id");
+        $log->warn("Prefetch ready for $next_id");
 
         # Prime the url-keyed metadata cache for the queued next track.
         # Apply the same comma-cleanup to the artist so the queue shows a
