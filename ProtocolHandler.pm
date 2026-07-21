@@ -299,6 +299,20 @@ sub _prefetch_next {
 
     return if $_prefetch_in_progress;
 
+    # Memory guard: on low-RAM devices (Pi Zero 2 W has 422MB) running a
+    # second yt-dlp + qjs alongside the main playback path pushes the system
+    # into heavy swap and can stall the whole server. Skip prefetch entirely
+    # when available memory is tight. /proc/meminfo's MemAvailable is the
+    # kernel's best estimate of genuinely free+reclaimable memory.
+    if (open(my $mh, '<', '/proc/meminfo')) {
+        my ($avail_kb) = (grep { /^MemAvailable:/ } <$mh>)[0] =~ /(\d+)/;
+        close $mh;
+        if (defined $avail_kb && $avail_kb < 60_000) {  # < 60MB free
+            $log->info("Skipping prefetch: low memory (${avail_kb}KB available)");
+            return;
+        }
+    }
+
     my $client = eval { $song->master() } || eval { $song->client() };
     return unless $client;
 
