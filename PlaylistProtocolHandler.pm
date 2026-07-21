@@ -15,9 +15,25 @@ my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 
 Slim::Player::ProtocolHandlers->registerHandler('ytmplaylist', __PACKAGE__);
 
+use Plugins::YouTubeMusic::ProtocolHandler;
+
 sub isRemote         { return 1; }
 sub contentType      { return 'aac'; }
 sub canDirectStream  { return 0; }
+
+# After explodePlaylist converts ytmplaylist:// → ytmusic:// tracks, LMS still
+# calls getNextTrack on *this* handler for the first track in the expanded list
+# because the original URL was ytmplaylist://. Delegate to ProtocolHandler so
+# yt-dlp resolution happens correctly.
+sub getNextTrack {
+    my ($class, @args) = @_;
+    return Plugins::YouTubeMusic::ProtocolHandler->getNextTrack(@args);
+}
+
+sub getMetadataFor {
+    my ($class, @args) = @_;
+    return Plugins::YouTubeMusic::ProtocolHandler->getMetadataFor(@args);
+}
 
 sub explodePlaylist {
     my ($class, $client, $url, $cb) = @_;
