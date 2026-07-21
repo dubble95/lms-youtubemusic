@@ -192,7 +192,8 @@ sub _apply_resolved {
     my $artist = $meta->{artist};
     if ($cached_meta && $cached_meta->{artist}) {
         $artist = $cached_meta->{artist};
-    } elsif ($artist && $artist =~ /,/) {
+    }
+    if ($artist && $artist =~ /,/) {
         $artist = (split(/,/, $artist))[0];
         $artist =~ s/^\s+|\s+$//g;
     }
