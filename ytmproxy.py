@@ -887,7 +887,6 @@ def stream_audio(video_id):
         "--no-part",
         "-f", "bestaudio/best",
         "--js-runtimes", "quickjs",
-        "--extractor-args", "youtube:player_client=mweb,ios,android,web",
         "-o", "-",
         url,
     ]
