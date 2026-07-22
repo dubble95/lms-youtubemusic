@@ -889,9 +889,10 @@ def stream_audio(video_id):
         "--retries", "2",
         "--extractor-retries", "2",
         "--no-part",
-        "-f", "bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio",
-        "--js-runtimes", "nodejs",
-        "--add-header", "User-Agent:com.google.android.youtube/17.29.34",
+        "-f", "bestaudio/best",
+        "--js-runtimes", "quickjs",
+        "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=android,web",
         "-o", "-",
         url,
     ]
