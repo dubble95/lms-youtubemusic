@@ -78,8 +78,14 @@ sub explodePlaylist {
             my $t_url = "ytmusic://$t->{videoId}";
             push @track_urls, $t_url;
 
-            # Prime metadata for every track so that getMetadataFor is
-            # immediately populated for the play queue.
+            Plugins::YouTubeMusic::ProtocolHandler->primeMetadata($t->{videoId}, {
+                title     => $t->{title}     || '',
+                artist    => $t->{artist}    || '',
+                album     => $t->{album}     || '',
+                thumbnail => $t->{thumbnail} || '',
+                duration  => $t->{duration}  || 0,
+            });
+
             $cache->set("ytm:meta:$t_url", {
                 title    => $t->{title}    || '',
                 artist   => $t->{artist}   || '',

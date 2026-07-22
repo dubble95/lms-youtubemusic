@@ -161,12 +161,23 @@ sub primeMetadata {
     my ($class, $video_id, $info) = @_;
     return unless $video_id && $info;
 
-    $_metadata_cache{$video_id} ||= {
+    $_metadata_cache{$video_id} = {
         title    => $info->{title}     || '',
         artist   => $info->{artist}    || '',
         album    => $info->{album}     || '',
         duration => $info->{duration}  || 0,
         cover    => $info->{thumbnail} || $info->{cover} || '',
+    };
+
+    eval {
+        my $t_url = "ytmusic://$video_id";
+        my $track = Slim::Schema->objectForUrl($t_url) || Slim::Schema->updateOrCreate({ url => $t_url });
+        if ($track) {
+            $track->title($info->{title})        if $info->{title};
+            $track->secs($info->{duration})      if $info->{duration};
+            $track->coverurl($info->{thumbnail} || $info->{cover}) if ($info->{thumbnail} || $info->{cover});
+            $track->update();
+        }
     };
 }
 
@@ -204,15 +215,24 @@ sub getMetadataFor {
     return {} unless $vid;
 
     my $cached = $_metadata_cache{$vid};
+    unless ($cached && $cached->{title}) {
+        require Slim::Utils::Cache;
+        my $cache = Slim::Utils::Cache->new();
+        my $disk_cached = $cache->get("ytm:meta:ytmusic://$vid");
+        if ($disk_cached && ref($disk_cached) eq 'HASH') {
+            $_metadata_cache{$vid} = $disk_cached;
+            $cached = $disk_cached;
+        }
+    }
 
     my %meta = (
         title   => ($cached && $cached->{title})  ? $cached->{title}  : "YouTube Music - $vid",
         artist  => ($cached && $cached->{artist}) ? $cached->{artist} : '',
-        album   => ($cached && $cached->{album})  ? $cached->{album}  : ' | YouTube Music',
+        album   => ($cached && $cached->{album})  ? $cached->{album}  : 'YouTube Music',
         cover   => ($cached && $cached->{cover})  ? $cached->{cover}
                     : Plugins::YouTubeMusic::Plugin->_pluginDataFor('icon'),
         type    => 'YouTube Music',
-        bitrate => '192k CBR',
+        bitrate => '320k CBR',
         duration => ($cached && $cached->{duration}) ? $cached->{duration} : undef,
     );
 
