@@ -107,47 +107,18 @@ The **Connection Status** indicator at the top of the settings page shows the cu
 ## Dependencies
 
 - LMS 8.0 or newer
-- System `yt-dlp` (recommended, auto-detected) or the bundled `Bin/yt-dlp_*` binary
+- System `yt-dlp` 2026.07 or newer (recommended, auto-detected)
 - Python 3 + `ytmusicapi` (for API calls)
 
-### Additional requirements for Premium music playback (important)
+### How audio streaming works (no JS runtime needed)
 
-Since late 2025, YouTube enforces **SABR streaming + a JS challenge (n-challenge)**. Playing Premium-exclusive music tracks therefore requires a **JS runtime and the EJS challenge solver**. If you only play public videos you can skip this setup, but listening to YouTube Music's music-only tracks (most songs) requires the installation below.
+Since late 2025 YouTube enforces **SABR streaming + a JS challenge (n-challenge)** on the *web* client, which previously required QuickJS or Node.js to solve. **This plugin avoids the challenge entirely** by resolving streams with the **Android YouTube app User-Agent** (`com.google.android.youtube/17.29.34`), which bypasses SABR/n-challenge and returns audio-only formats (m4a 128 kbps / opus 160 kbps) directly — no JS runtime, no `yt-dlp-ejs`, no 80-second delay.
 
-**Recommended: use QuickJS** (especially well-suited to memory-constrained environments like Raspberry Pi)
+This technique was learned from [schmij97/lms-ytmusic](https://github.com/schmij97/lms-ytmusic)'s `ytmproxy.py`.
 
-QuickJS is a ~5 MB binary and uses roughly 1/18th the memory of Node (~90 MB), making it stable on low-memory devices such as the Pi Zero 2 W.
+> **Important**: Cookies are used **only** for API calls (search, browse, library, Supermix) via `ytm_api.py` — not for stream resolution. Passing cookies to the Android client causes YouTube to return "This video is only available to Music Premium members". The split is handled automatically by the plugin.
 
-```bash
-# 1. Compile QuickJS from source (requires gcc)
-sudo apt-get install -y gcc make
-cd /tmp
-wget https://github.com/bellard/quickjs/archive/refs/heads/master.tar.gz -O qjs.tar.gz
-tar xzf qjs.tar.gz
-cd quickjs-master
-
-# On armv7l (32-bit Pi) you must add -latomic
-sed -i 's/^LIBS=-lm -lpthread/LIBS=-lm -lpthread -latomic/' Makefile
-sed -i 's/HOST_LIBS=-lm -ldl -lpthread/HOST_LIBS=-lm -ldl -lpthread -latomic/' Makefile
-
-make qjs
-sudo cp qjs /usr/local/bin/qjs
-sudo chmod 755 /usr/local/bin/qjs
-qjs -e "console.log(42)"  # should print 42
-
-# 2. Install yt-dlp-ejs (the challenge solver)
-sudo pip3 install -U yt-dlp-ejs
-
-# 3. Verify
-yt-dlp --js-runtimes quickjs --verbose --list-formats "https://music.youtube.com/watch?v=<videoId>"
-# Success looks like:
-#   [debug] JS runtimes: quickjs-<version>
-#   [debug] [youtube] [jsc] JS Challenge Providers: ... quickjs
-```
-
-> **Alternative: Node.js 22 or newer** — On x86_64/aarch64 where compiling QuickJS is awkward, install Node 22+ and make it accessible at `/usr/local/bin/node`. Note that on a Pi Zero 2 W (422 MB RAM) Node's memory footprint is excessive, so QuickJS is recommended. To switch, change `--js-runtimes quickjs` to `--js-runtimes node` in the plugin's `ProtocolHandler.pm`.
-
-Without this setup, only public videos will play; Premium music tracks will be skipped with a "Requested format is not available" error.
+No QuickJS, Node.js, or `yt-dlp-ejs` installation is required anymore.
 
 ## File structure (key files)
 
@@ -165,6 +136,7 @@ Without this setup, only public videos will play; Premium music tracks will be s
 
 ## Acknowledgements
 
+- **[schmij97/lms-ytmusic](https://github.com/schmij97/lms-ytmusic)** — The Android User-Agent streaming technique and playlist-protocol-handler pattern were adapted from this project. Their approach of bypassing the n-challenge by using the Android client path was the key insight that eliminated the need for QuickJS/Node.js entirely.
 - Based on the `philippe44/LMS-YouTube` plugin architecture
 - Uses `yt-dlp` for media extraction
 - Uses `ytmusicapi` for API calls

@@ -148,21 +148,21 @@ sub _resolve_ytdlp {
     $log->warn("Cache MISS for $id — resolving via yt-dlp");
     my $yt_url = "https://music.youtube.com/watch?v=$id";
 
+    # Use the Android YouTube app User-Agent. This lets yt-dlp fetch audio
+    # streams WITHOUT cookies and WITHOUT a JS runtime (n-challenge), because
+    # the Android client path does not enforce SABR/n-challenge like the web
+    # client does.  Cookies must NOT be passed here — when cookies are present
+    # YouTube returns "This video is only available to Music Premium members"
+    # for the Android client.  Cookies are only used for API calls (search,
+    # browse, library) via ytm_api.py, not for stream resolution.
+    #
+    # Inspired by schmij97/lms-ytmusic's ytmproxy.py stream_audio().
     my @cmd = ($yt_dlp, '--no-warnings', '--quiet',
-               '--js-runtimes', 'quickjs',
-               '--extractor-args', 'youtube:player_client=android,web',
+               '--no-check-certificates',
+               '--socket-timeout', '10',
+               '--retries', '2',
+               '--add-header', 'User-Agent:com.google.android.youtube/17.29.34',
                '-j', $yt_url);
-
-    my $cookie_raw = $prefs->get('cookie_raw');
-    my $cookie_str = $prefs->get('cookie');
-    if ($cookie_raw || $cookie_str) {
-        my $cookies_file = _write_cookies_file($cookie_raw, $cookie_str);
-        if ($cookies_file) {
-            push @cmd, '--cookies', $cookies_file;
-        } elsif ($cookie_str) {
-            push @cmd, '--add-header', "Cookie:$cookie_str";
-        }
-    }
 
     local $ENV{PYTHONWARNINGS} = 'ignore';
     my $cv = AnyEvent::Util::run_cmd(
