@@ -268,7 +268,9 @@ _SEARCH_PARAMS = {
     "artists":   "EgWKAQIgAWoKEAkQChADEAQQBQ==",
     "playlists": "EgeKAQQoAEABahAQDhAKEAMQBBAJEAUQCw==",
     "videos":    "EgWKAQIQAWoKEAkQChADEAQQBQ==",
-}def search(query, type_filter="songs"):
+}
+
+def search(query, type_filter="songs"):
     cache_key = f"search:{type_filter}:{query}"
     cached = _cache_get(cache_key)
     if cached is not None:
