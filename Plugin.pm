@@ -59,6 +59,18 @@ sub initPlugin {
 
     # Start the endless-radio auto-queue (subscribes to playlist notifications).
     Plugins::YouTubeMusic::Radio->init();
+
+    # Register ImageProxy handler for YouTube Music cover art so LMS fetches and serves 200 OK images instead of 301 redirects
+    eval {
+        require Slim::Web::ImageProxy;
+        Slim::Web::ImageProxy->registerHandler(
+            match => qr{googleusercontent\.com|ggpht\.com},
+            func  => sub {
+                my ($url, $spec) = @_;
+                return $url;
+            },
+        );
+    };
 }
 
 sub shutdownPlugin {
