@@ -173,7 +173,7 @@ sub handleSearch {
     Plugins::YouTubeMusic::API->search(sub {
         my $result = shift;
         
-        if ($result->{error}) {
+        if (ref($result) eq 'HASH' && $result->{error}) {
             $cb->({ items => [{ name => "Error: " . $result->{error}, type => 'text' }] });
             return;
         }
@@ -201,7 +201,7 @@ sub handleBrowse {
     Plugins::YouTubeMusic::API->browse(sub {
         my $result = shift;
         
-        if ($result->{error}) {
+        if (ref($result) eq 'HASH' && $result->{error}) {
             $log->warn("handleBrowse API error: $result->{error}");
             $cb->({ items => [{ name => "Error: " . $result->{error}, type => 'text' }] });
             return;
