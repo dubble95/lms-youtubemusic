@@ -350,7 +350,7 @@ def search(query, type_filter="songs"):
 
 def browse_home():
     cached = _cache_get("home")
-    if cached is not None:
+    if cached:
         return cached
     data     = _post("browse", {"browseId": "FEmusic_home"})
     sections = _single_col_sections(data)
@@ -362,42 +362,10 @@ def browse_home():
         title = _text(
             carousel.get("header", {}).get("musicCarouselShelfBasicHeaderRenderer", {})
         )
-        items = []
-        for entry in carousel.get("contents", []):
-            r = entry.get("musicTwoRowItemRenderer", {})
-            if not r:
-                continue
-            nav       = r.get("navigationEndpoint", {})
-            browse_ep = nav.get("browseEndpoint", {})
-            watch_ep  = nav.get("watchEndpoint", {})
-            thumb     = _thumbnail(
-                r.get("thumbnailRenderer", {})
-                 .get("musicThumbnailRenderer", {})
-                 .get("thumbnail", {})
-                 .get("thumbnails", [])
-            )
-            item = {
-                "title":     _text(r),
-                "subtitle":  _text(r, "subtitle"),
-                "thumbnail": thumb,
-            }
-            if browse_ep.get("browseId"):
-                pt = (
-                    browse_ep.get("browseEndpointContextSupportedConfigs", {})
-                             .get("browseEndpointContextMusicConfig", {})
-                             .get("pageType", "")
-                )
-                item["browseId"]  = browse_ep["browseId"]
-                item["pageType"]  = pt
-                item["type"] = (
-                    "album"  if "ALBUM"  in pt else
-                    "artist" if "ARTIST" in pt else
-                    "playlist"
-                )
-            elif watch_ep.get("videoId"):
-                item["videoId"] = watch_ep["videoId"]
-                item["url"]     = f"ytm://{watch_ep['videoId']}"
-                item["type"]    = "song"
+        items = _parse_two_row_items(carousel)
+        if items:
+            result.append({"title": title or "Featured", "items": items})
+
     if not result:
         # Fallback for regional / unauthenticated accounts: construct rich Home sections
         top_hits = search("Top Hits", "songs")
@@ -407,7 +375,8 @@ def browse_home():
         if new_releases:
             result.extend(new_releases)
 
-    _cache_set("home", result)
+    if result:
+        _cache_set("home", result)
     return result
 
 def browse_charts():
