@@ -748,8 +748,8 @@ def _detect_audio_codec():
         logging.warning("ffmpeg codec detection failed: %s", e)
         return "libmp3lame", "mp3", "audio/mpeg"
 
-# Force FLAC — maximum audio quality (lossless decode from YouTube AAC/Opus).
-_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "flac", "flac", "audio/flac"
+# Force MP3 at 320k — 100% compatible with Squeezelite while preserving maximum YouTube AAC audio quality.
+_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "libmp3lame", "mp3", "audio/mpeg"
 
 PREFETCH_DIR = "/tmp/ytmproxy_prefetch"
 _prefetch_started = set()
@@ -905,7 +905,7 @@ def stream_audio(video_id):
         "-codec:a", _AUDIO_CODEC,
     ]
     if _AUDIO_CODEC not in ("flac", "pcm_s16le"):
-        ffmpeg_cmd += ["-b:a", "192k"]
+        ffmpeg_cmd += ["-b:a", "320k"]
     ffmpeg_cmd.append("pipe:1")
 
     logging.info("Streaming videoId=%s", video_id)

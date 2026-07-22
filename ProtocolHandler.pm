@@ -45,10 +45,10 @@ sub canSeek         { 0 }
 sub canDirectStream { 0 }
 sub songBytes       {}
 
-# Audio format — the proxy transcodes to lossless FLAC via ffmpeg for max audio quality
-sub formatOverride  { 'flc' }
-sub getFormatForURL { 'flc' }
-sub contentType     { 'flc' }
+# Audio format — the proxy transcodes to high-quality 320k MP3 via ffmpeg for maximum player compatibility
+sub formatOverride  { 'mp3' }
+sub getFormatForURL { 'mp3' }
+sub contentType     { 'mp3' }
 
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
 # to fetch ytmusic:// as an HTTP URL. Just pass the track back immediately.
