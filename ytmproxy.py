@@ -1129,6 +1129,29 @@ class _Handler(BaseHTTPRequestHandler):
                 status = start_prefetch(vid)
                 self._send_json({"videoId": vid, "status": status})
 
+            elif path.startswith("/imageproxy"):
+                parsed_url = urllib.parse.urlparse(self.path)
+                params = urllib.parse.parse_qs(parsed_url.query)
+                target_url = params.get("url", [None])[0]
+                if not target_url:
+                    return self._error("Missing url parameter", 400)
+                try:
+                    req = urllib.request.Request(target_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        content_type = resp.headers.get("Content-Type", "image/jpeg")
+                        body = resp.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", content_type)
+                        self.send_header("Content-Length", str(len(body)))
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.send_header("Cache-Control", "public, max-age=86400")
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+                except Exception as img_err:
+                    logging.warning("Image proxy error for %s: %s", target_url, img_err)
+                    return self._error(f"Image proxy failed: {img_err}", 502)
+
             else:
                 self._error(f"Unknown endpoint: {path}", 404)
         except urllib.error.HTTPError as exc:

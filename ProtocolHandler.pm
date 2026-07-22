@@ -217,6 +217,18 @@ sub _fetch_metadata {
     });
 }
 
+sub _format_cover_url {
+    my ($cover) = @_;
+    return undef unless $cover;
+    return $cover if $cover =~ m{^http://(?:127\.0\.0\.1|192\.168|localhost)};
+
+    my $port      = $prefs->get('proxy_port') || 9876;
+    my $server_ip = Slim::Utils::Network::serverAddr() || '127.0.0.1';
+
+    require URI::Escape;
+    return "http://$server_ip:$port/imageproxy?url=" . URI::Escape::uri_escape($cover);
+}
+
 # getMetadataFor — called when building Now Playing info
 sub getMetadataFor {
     my ($class, $client, $url) = @_;
@@ -235,8 +247,8 @@ sub getMetadataFor {
         }
     }
 
-    my $cover = ($cached && $cached->{cover}) ? $cached->{cover}
-                : Plugins::YouTubeMusic::Plugin->_pluginDataFor('icon');
+    my $raw_cover = ($cached && $cached->{cover}) ? $cached->{cover} : undef;
+    my $cover = _format_cover_url($raw_cover) || Plugins::YouTubeMusic::Plugin->_pluginDataFor('icon');
 
     my %meta = (
         title       => ($cached && $cached->{title})  ? $cached->{title}  : "YouTube Music - $vid",
@@ -262,14 +274,14 @@ sub getCoverArt {
 
     my $cached = $_metadata_cache{$vid};
     if ($cached && $cached->{cover}) {
-        return $cached->{cover};
+        return _format_cover_url($cached->{cover});
     }
 
     require Slim::Utils::Cache;
     my $cache = Slim::Utils::Cache->new();
     my $disk_cached = $cache->get("ytm:meta:ytmusic://$vid");
     if ($disk_cached && ref($disk_cached) eq 'HASH' && $disk_cached->{cover}) {
-        return $disk_cached->{cover};
+        return _format_cover_url($disk_cached->{cover});
     }
 
     return undef;
