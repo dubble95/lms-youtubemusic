@@ -1106,6 +1106,7 @@ class _Handler(BaseHTTPRequestHandler):
 
                 self.send_response(200)
                 self.send_header("Content-Type", _AUDIO_MIME)
+                self.send_header("Connection", "close")
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 try:
