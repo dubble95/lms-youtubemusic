@@ -195,43 +195,39 @@ sub _fetch_and_append {
     my $cid = $client->id;
     return if $state{$cid}{refilling};   # already in flight
 
-    my $body;
-    if ($seed_video_id) {
-        $body = { videoId => $seed_video_id, limit => SEED_BATCH, radio => 1 };
-    } elsif ($seed_playlist_id || $state{$cid}{radio_playlist}) {
-        $body = {
-            playlistId => ($seed_playlist_id || $state{$cid}{radio_playlist}),
-            limit      => REFILL_BATCH,
-        };
-    } else {
-        $log->warn("Radio: no seed available for $cid, skipping refill");
+    unless ($seed_video_id) {
+        $log->warn("Radio: no seed videoId for $cid, skipping refill");
         return;
     }
 
     $state{$cid}{refilling} = 1;
 
-    Plugins::YouTubeMusic::API->watch_playlist(sub {
-        my $result = shift;
+    # The proxy's /radio endpoint returns a flat array of track items:
+    #   [{type, videoId, title, artist, thumbnail}, ...]
+    Plugins::YouTubeMusic::API->browseRadio($seed_video_id, sub {
+        my $tracks = shift;
         $state{$cid}{refilling} = 0;
 
-        if (!$result || $result->{error}) {
-            $log->warn('Radio: watch_playlist failed: ' . ($result ? $result->{error} : 'no result'));
+        # The proxy returns an array ref directly, not a hash with 'tracks'.
+        # Be defensive: accept both shapes.
+        if (ref($tracks) eq 'HASH') {
+            if ($tracks->{error}) {
+                $log->warn('Radio: browseRadio failed: ' . $tracks->{error});
+                return;
+            }
+            $tracks = $tracks->{tracks} || [];
+        }
+
+        unless (ref($tracks) eq 'ARRAY' && @$tracks) {
+            $log->warn('Radio: no tracks returned');
             return;
         }
 
-        # Save the radio playlistId for continuity on subsequent refills.
-        if ($result->{playlistId}) {
-            $state{$cid}{radio_playlist} = $result->{playlistId};
-        }
-
-        my $n = $result->{tracks} ? scalar(@{$result->{tracks}}) : 0;
-        return unless $n;
-
-        my $appended = _append_tracks($client, $result->{tracks});
+        my $appended = _append_tracks($client, $tracks);
         if ($appended && @$appended) {
             $state{$cid}{last_video_id} = $appended->[-1];
         }
-    }, $body);
+    });
 }
 
 # ─── playlist change handler ────────────────────────────────────────────────
@@ -244,11 +240,7 @@ sub _onPlaylistChange {
     # Only act when the queue is (or recently became) ours.
     return unless _queue_is_ours($client);
 
-    # Auto-enable only when the cookie is configured — without auth, the
-    # radio API returns nothing useful.
-    my $cookie = $prefs->get('cookie');
-    return unless $cookie && length($cookie) > 50;
-
+    # The proxy handles cookies internally, so no cookie pref check needed here.
     my $cid = $client->id;
 
     # What is currently playing?

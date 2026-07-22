@@ -45,11 +45,10 @@ sub canSeek         { 0 }
 sub canDirectStream { 0 }
 sub songBytes       {}
 
-# Audio format — the proxy always transcodes to MP3 via ffmpeg so LMS
-# knows to treat the stream as MP3.
-sub formatOverride  { 'mp3' }
-sub getFormatForURL { 'mp3' }
-sub contentType     { 'mp3' }
+# Audio format — the proxy transcodes to lossless FLAC via ffmpeg for max audio quality
+sub formatOverride  { 'flc' }
+sub getFormatForURL { 'flc' }
+sub contentType     { 'flc' }
 
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
 # to fetch ytmusic:// as an HTTP URL. Just pass the track back immediately.
@@ -77,7 +76,7 @@ sub new {
     }
 
     $args->{url} = $streamUrl;
-    $log->info("Opening local proxy stream: $streamUrl");
+    $log->warn("Opening local proxy stream: $streamUrl");
 
     return $class->SUPER::new({
         url    => $streamUrl,
@@ -113,7 +112,7 @@ sub getNextTrack {
     my $server_ip = Slim::Utils::Network::serverAddr() || '127.0.0.1';
     my $streamUrl = "http://$server_ip:$port/stream/$vid";
 
-    $log->info("Routing playback through local proxy: $streamUrl");
+    $log->warn("Routing playback through local proxy: $streamUrl");
 
     $song->streamUrl($streamUrl);
 

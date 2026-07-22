@@ -748,10 +748,8 @@ def _detect_audio_codec():
         logging.warning("ffmpeg codec detection failed: %s", e)
         return "libmp3lame", "mp3", "audio/mpeg"
 
-# Force MP3 — the most universally compatible codec for squeezelite.
-# FLAC causes seek/loop issues on some players, and the quality difference
-# is minimal since the source (YouTube AAC ~130kbps) is already lossy.
-_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "libmp3lame", "mp3", "audio/mpeg"
+# Force FLAC — maximum audio quality (lossless decode from YouTube AAC/Opus).
+_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "flac", "flac", "audio/flac"
 
 PREFETCH_DIR = "/tmp/ytmproxy_prefetch"
 _prefetch_started = set()
