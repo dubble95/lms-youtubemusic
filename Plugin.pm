@@ -433,7 +433,7 @@ sub _parseListItem {
         $browseId ||= "VL" . $playlistId if $playlistId;
 
         if ($browseId) {
-            return _playlist_play_item($title, $subtitle, $browseId, $thumb);
+            return _playlist_item($title, $subtitle, $browseId, $thumb);
         }
         return undef;
     }
