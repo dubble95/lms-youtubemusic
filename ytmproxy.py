@@ -894,6 +894,8 @@ def stream_audio(video_id):
     ffmpeg_cmd = [
         "ffmpeg",
         "-loglevel", "error",
+        "-probesize", "32k",
+        "-analyzeduration", "0",
         "-i", "pipe:0",
         "-vn",
         "-map_metadata", "-1",
