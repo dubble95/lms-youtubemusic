@@ -750,8 +750,8 @@ def _detect_audio_codec():
         logging.warning("ffmpeg codec detection failed: %s", e)
         return "libmp3lame", "mp3", "audio/mpeg"
 
-# Force MP3 at 320k — 100% compatible with Squeezelite while preserving maximum YouTube AAC audio quality.
-_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "libmp3lame", "mp3", "audio/mpeg"
+# Lossless FLAC output — 100% bit-exact PCM pass-through from YouTube's Opus/AAC source with zero MP3 re-compression loss.
+_AUDIO_CODEC, _AUDIO_FORMAT, _AUDIO_MIME = "flac", "flac", "audio/flac"
 
 PREFETCH_DIR = "/tmp/ytmproxy_prefetch"
 _prefetch_started = set()

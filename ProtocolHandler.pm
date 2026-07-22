@@ -45,10 +45,10 @@ sub canSeek         { 0 }
 sub canDirectStream { 0 }
 sub songBytes       {}
 
-# Audio format — the proxy transcodes to high-quality 320k MP3 via ffmpeg for maximum player compatibility
-sub formatOverride  { 'mp3' }
-sub getFormatForURL { 'mp3' }
-sub contentType     { 'mp3' }
+# Audio format — the proxy transcodes Opus to 100% lossless FLAC (48kHz/16-bit) with zero re-compression loss
+sub formatOverride  { 'flc' }
+sub getFormatForURL { 'flc' }
+sub contentType     { 'flc' }
 
 # Override scanUrl to prevent Slim::Utils::Scanner::Remote from trying
 # to fetch ytmusic:// as an HTTP URL. Just pass the track back immediately.
@@ -251,8 +251,8 @@ sub getMetadataFor {
         coverurl    => $cover,
         artwork_url => $cover,
         coverart    => ($cached && $cached->{cover}) ? 1 : 0,
-        type        => 'YouTube Music',
-        bitrate     => '320k CBR',
+        type        => 'YouTube Music (FLAC)',
+        bitrate     => 'FLAC (Lossless 48kHz)',
         duration    => ($cached && $cached->{duration}) ? $cached->{duration} : undef,
     );
 
