@@ -677,5 +677,13 @@ sub _getThumb {
     return "";
 }
 
+sub _pluginDataFor {
+    my ($class, $data) = @_;
+    if ($data && $data =~ /^icon/) {
+        return 'plugins/YouTubeMusic/html/images/icon.svg';
+    }
+    return $class->SUPER::_pluginDataFor($data);
+}
+
 1;
 
