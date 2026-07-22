@@ -219,6 +219,16 @@ sub handleBrowse {
 
         $log->warn("handleBrowse returning " . scalar(@$items) . " items");
 
+        if ($browseId && ref($items) eq 'ARRAY' && @$items) {
+            my $play_url = "ytmplaylist://$browseId";
+            unshift @$items, {
+                name  => "▶ Play All",
+                type  => 'audio',
+                url   => $play_url,
+                play  => $play_url,
+            };
+        }
+
         $cb->({ items => $items });
     }, $browseId);
 }
@@ -585,12 +595,14 @@ sub _playlist_item {
     my $play_url = "ytmplaylist://$browse_id";
     my $label    = $title . ($subtitle ? " ($subtitle)" : "");
     return {
-        name  => $label,
-        type  => 'outline',
-        url   => \&handleBrowse,
+        name        => $label,
+        type        => 'playlist',
+        url         => \&handleBrowse,
         passthrough => [{ browseId => $browse_id }],
-        play  => $play_url,
-        image => $thumb,
+        play        => $play_url,
+        playall     => $play_url,
+        hasitems    => 1,
+        image       => $thumb,
     };
 }
 
