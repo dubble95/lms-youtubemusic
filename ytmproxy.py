@@ -838,6 +838,13 @@ def get_prefetched_path(video_id):
         except OSError:
             pass
     return None
+def _find_ffmpeg():
+    for path in ("/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"):
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
 def _find_ytdlp():
     for name in ("yt-dlp", "yt_dlp", "youtube-dl"):
         path = shutil.which(name)
