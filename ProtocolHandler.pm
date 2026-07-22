@@ -180,9 +180,8 @@ sub primeMetadata {
             $track->title($info->{title})   if $info->{title};
             $track->secs($info->{duration}) if $info->{duration};
             if ($cover) {
-                my $formatted = _format_cover_url($cover);
-                eval { $track->cover($formatted); };
-                eval { $track->coverurl($formatted); };
+                eval { $track->cover($cover); };
+                eval { $track->coverurl($cover); };
                 eval { $track->coverart(1); };
             }
             $track->update();
@@ -211,9 +210,8 @@ sub _fetch_metadata {
             $track->title($info->{title})   if $info->{title};
             $track->secs($info->{duration}) if $info->{duration};
             if ($cover) {
-                my $formatted = _format_cover_url($cover);
-                eval { $track->cover($formatted); };
-                eval { $track->coverurl($formatted); };
+                eval { $track->cover($cover); };
+                eval { $track->coverurl($cover); };
                 eval { $track->coverart(1); };
             }
             $track->update();
