@@ -869,11 +869,11 @@ def stream_audio(video_id):
     simple sequential MP3 stream (moov-atom positioning in raw MP4/WebM from
     the YouTube CDN makes direct streaming unreliable on hardware decoders).
     """
+    url = f"https://music.youtube.com/watch?v={video_id}"
     ytdlp = _find_ytdlp()
     if not ytdlp:
-        raise RuntimeError("yt-dlp not found in PATH")
-
-    url = f"https://music.youtube.com/watch?v={video_id}"
+        logging.error("yt-dlp binary not found!")
+        return
 
     ytdlp_cmd = [
         ytdlp,
@@ -892,10 +892,8 @@ def stream_audio(video_id):
     ]
 
     ffmpeg_cmd = [
-        "ffmpeg",
+        _find_ffmpeg(),
         "-loglevel", "error",
-        "-probesize", "32k",
-        "-analyzeduration", "0",
         "-i", "pipe:0",
         "-vn",
         "-map_metadata", "-1",
