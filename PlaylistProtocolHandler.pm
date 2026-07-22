@@ -52,9 +52,13 @@ sub explodePlaylist {
     Plugins::YouTubeMusic::API->watch_playlist(sub {
         my $resp = shift;
 
-        # The API helper returns a hash with a 'tracks' array. Be defensive in
-        # case the shape changes or an error slipped through.
-        my $tracks = (ref($resp) eq 'HASH') ? ($resp->{tracks} || []) : [];
+        # The API helper returns a hash with a 'tracks' array or an array of items.
+        my $tracks = [];
+        if (ref($resp) eq 'HASH') {
+            $tracks = $resp->{tracks} || [];
+        } elsif (ref($resp) eq 'ARRAY') {
+            $tracks = $resp;
+        }
 
         unless (ref($tracks) eq 'ARRAY' && @$tracks) {
             $log->error("Playlist $browse_id returned no tracks");

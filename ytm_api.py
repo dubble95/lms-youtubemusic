@@ -484,8 +484,18 @@ def main():
                     result = _convert_library_artists(ytm.get_library_artists(limit=50))
                 elif browse_id == 'FEmusic_library_songs':
                     result = _convert_library_songs(ytm.get_library_songs(limit=100))
-                elif browse_id.startswith('VL') or browse_id.startswith('RDAMPL'):
-                    result = _convert_playlist(ytm.get_playlist(browse_id[2:] if browse_id.startswith('VL') else browse_id, limit=50))
+                elif browse_id.startswith('VL') or browse_id.startswith('RD'):
+                    pid = browse_id[2:] if browse_id.startswith('VL') else browse_id
+                    if pid.startswith('RD'):
+                        try:
+                            result = _convert_watch_playlist(ytm.get_watch_playlist(playlistId=pid, limit=50))
+                        except Exception:
+                            result = _convert_playlist(ytm.get_playlist(pid, limit=50))
+                    else:
+                        try:
+                            result = _convert_playlist(ytm.get_playlist(pid, limit=50))
+                        except Exception:
+                            result = _convert_watch_playlist(ytm.get_watch_playlist(playlistId=pid, limit=50))
                 elif browse_id.startswith('MPREb_') or (len(browse_id) > 10 and browse_id[0].isupper() and '_' not in browse_id[:6]):
                     try:
                         result = _convert_album(ytm.get_album(browse_id))
