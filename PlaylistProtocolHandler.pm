@@ -38,7 +38,7 @@ sub getMetadataFor {
 sub explodePlaylist {
     my ($class, $client, $url, $cb) = @_;
 
-    my ($browse_id) = $url =~ /ytmplaylist:\/\/(.+)/;
+    my ($browse_id) = $url =~ /ytmplaylist:(?:\/\/)?(.+)/;
     unless ($browse_id) {
         $log->error("invalid ytmplaylist URL: $url");
         $cb->([]);
