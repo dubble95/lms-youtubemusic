@@ -136,10 +136,21 @@ No QuickJS, Node.js, or `yt-dlp-ejs` installation is required anymore.
 
 ## Acknowledgements
 
-- **[schmij97/lms-ytmusic](https://github.com/schmij97/lms-ytmusic)** — The Android User-Agent streaming technique and playlist-protocol-handler pattern were adapted from this project. Their approach of bypassing the n-challenge by using the Android client path was the key insight that eliminated the need for QuickJS/Node.js entirely.
+- **[schmij97/lms-ytmusic](https://github.com/schmij97/lms-ytmusic)** — The proxy-based streaming architecture (`ytmproxy.py`), the Android User-Agent technique, and the playlist-protocol-handler pattern were adapted from this project. Their approach of piping yt-dlp through ffmpeg to produce a clean MP3 stream solved the squeezelite moov-atom problem and eliminated the need for QuickJS/Node.js entirely.
 - Based on the `philippe44/LMS-YouTube` plugin architecture
 - Uses `yt-dlp` for media extraction
 - Uses `ytmusicapi` for API calls
+
+## Disclaimer
+
+This project is **not affiliated with, endorsed by, or sponsored by YouTube, Google, or Alphabet**. "YouTube Music" is a trademark of Google LLC.
+
+This is an unofficial plugin that uses the publicly accessible YouTube Music InnerTube API and `yt-dlp` for stream resolution. It does not circumvent any digital rights management (DRM) — it plays content that is already accessible to the authenticated account through a web browser.
+
+- A valid YouTube Music **cookie** from your own account is required for personalisation (search, library, Supermix). Playback of Premium-exclusive tracks requires a Premium subscription.
+- The plugin streams audio for **personal, non-commercial use** only. Redistribution, public performance, or commercial use of the streamed content may violate YouTube's Terms of Service.
+- The authors are not responsible for any misuse of this software or for any consequences arising from its use.
+- This software is provided "as is" without warranty of any kind, under the MIT License.
 
 ## License
 

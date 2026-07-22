@@ -3,6 +3,9 @@ package Plugins::YouTubeMusic::Plugin;
 use strict;
 use warnings;
 use base qw(Slim::Plugin::OPMLBased);
+use Time::HiRes;
+use POSIX qw(SIGTERM);
+use File::Spec ();
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 
@@ -12,16 +15,30 @@ use Plugins::YouTubeMusic::ProtocolHandler;
 use Plugins::YouTubeMusic::PlaylistProtocolHandler;
 use Plugins::YouTubeMusic::Radio;
 
-my $log = Slim::Utils::Log->addLogCategory({
-    'category'     => 'plugin.youtubemusic',
-    'defaultLevel' => 'WARN',
-    'description'  => 'PLUGIN_YOUTUBEMUSIC',
-});
+my $log;
+my $prefs;
+my $PROXY_PID;
 
 sub initPlugin {
     my $class = shift;
 
+    # Register the log category at initPlugin time — doing it at BEGIN time
+    # can fail because LMS may not have initialised its logging system yet.
+    $log = Slim::Utils::Log::addLogCategory({
+        'category'     => 'plugin.youtubemusic',
+        'defaultLevel' => 'WARN',
+        'description'  => 'PLUGIN_YOUTUBEMUSIC',
+    }) || do {
+        # Fallback: use the generic logger
+        $log = Slim::Utils::Log->logger('plugin.youtubemusic');
+    };
+
     $log->warn('YouTube Music plugin loading.');
+
+    $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
+    $prefs->init({ proxy_port => 9876 });
+
+    $class->_start_proxy();
 
     $class->SUPER::initPlugin(
         feed   => \&handleFeed,
@@ -36,29 +53,67 @@ sub initPlugin {
         Plugins::YouTubeMusic::Settings->new();
     }
 
-    # Automatically disable raw pass-through for aac and mp4 to force Lyrion to transcode them
-    # (since raw AAC direct stream/pass-through causes decoder errors on squeezelite)
-    my $serverPrefs = Slim::Utils::Prefs::preferences('server');
-    if ($serverPrefs) {
-        my $disabledRef = $serverPrefs->get('disabledformats') || [];
-        my %disabled = map { $_ => 1 } @$disabledRef;
-        my $updated = 0;
-        for my $fmt (qw(aac-aac-*-* mp4-aac-*-*)) {
-            if (!$disabled{$fmt}) {
-                push @$disabledRef, $fmt;
-                $updated = 1;
-            }
-        }
-        if ($updated) {
-            $serverPrefs->set('disabledformats', $disabledRef);
-            $log->warn("Disabled aac-aac-*-* and mp4-aac-*-* globally to force server-side transcoding of remote stream");
-        }
-    }
-
     $log->warn('YouTube Music plugin loaded.');
 
-    # Start the endless-radio auto-queue (subscribes to playlist notifications).
-    Plugins::YouTubeMusic::Radio->init();
+    # Radio auto-queue — needs API format migration for proxy-based API.
+    # TODO: re-enable after updating Radio.pm to use proxy response format.
+    # Plugins::YouTubeMusic::Radio->init();
+}
+
+sub shutdownPlugin {
+    my $class = shift;
+    if ($PROXY_PID) {
+        $log->info("Stopping YouTube Music proxy (PID $PROXY_PID)");
+        eval { kill SIGTERM, $PROXY_PID };
+        waitpid($PROXY_PID, 0);
+        $PROXY_PID = undef;
+    }
+}
+
+# Start the Python proxy (ytmproxy.py) that handles:
+#   - InnerTube API calls (search, browse, library) with cookies
+#   - Stream resolution via yt-dlp → ffmpeg pipe (MP3 output)
+sub _start_proxy {
+    my $class = shift;
+    my $port   = $prefs->get('proxy_port') || 9876;
+    my $script = File::Spec->catfile($class->_pluginDataFor('basedir'), 'ytmproxy.py');
+
+    unless (-f $script) {
+        $log->error("Proxy script not found at $script");
+        return;
+    }
+
+    my $python = _find_python();
+    unless ($python) {
+        $log->error("python3 not found in PATH");
+        return;
+    }
+
+    $log->info("Starting YouTube Music proxy: $python $script --port $port");
+
+    my $pid = fork();
+    if (!defined $pid) {
+        $log->error("fork() failed: $!");
+        return;
+    }
+
+    if ($pid == 0) {
+        exec($python, $script, '--port', $port, '--log-level', 'WARNING') or do {
+            $log->error("exec failed: $!");
+            exit 1;
+        };
+    }
+
+    $PROXY_PID = $pid;
+    $log->info("Proxy started (PID $pid)");
+}
+
+sub _find_python {
+    for my $py (qw(python3 python)) {
+        my $path = `which $py 2>/dev/null`; chomp $path;
+        return $path if $path && -x $path;
+    }
+    return undef;
 }
 
 

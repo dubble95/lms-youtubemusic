@@ -1,98 +1,100 @@
 package Plugins::YouTubeMusic::API;
 
 use strict;
+use warnings;
 
 use JSON::XS::VersionOneAndTwo;
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
-use AnyEvent::Util;
-use Plugins::YouTubeMusic::Utils;
+use Slim::Networking::SimpleAsyncHTTP;
 
 my $prefs = Slim::Utils::Prefs::preferences('plugin.youtubemusic');
 my $log   = Slim::Utils::Log::logger('plugin.youtubemusic');
 
-# Path to the Python API helper script
-sub _api_script {
-    my $plugin_info = Slim::Utils::PluginManager->allPlugins->{'YouTubeMusic'};
-    if ($plugin_info && $plugin_info->{'basedir'}) {
-        return $plugin_info->{'basedir'} . '/ytm_api.py';
-    }
-    return '/usr/share/squeezeboxserver/Plugins/YouTubeMusic/ytm_api.py';
+# ── Proxy-based API ───────────────────────────────────────────────────────────
+# All calls go through the local Python proxy (ytmproxy.py) started by Plugin.pm.
+# The proxy handles the YouTube Music InnerTube API with cookies for
+# personalisation and yt-dlp for stream resolution.
+
+sub _proxy_url {
+    my $port = $prefs->get('proxy_port') || 9876;
+    return "http://127.0.0.1:$port";
 }
 
-sub browse {
-    my ($class, $cb, $browse_id, $params) = @_;
-    my $body = { browseId => $browse_id };
-    $body->{params} = $params if $params;
-    _call('browse', $body, $cb);
+sub _get {
+    my ($path, $cb) = @_;
+
+    my $url = _proxy_url() . $path;
+    $log->info("API GET: $url");
+
+    Slim::Networking::SimpleAsyncHTTP->new(
+        sub {
+            my $http = shift;
+            my $data = eval { decode_json($http->content) };
+            if ($@) {
+                $log->error("JSON decode error for $url: $@");
+                $cb->(undef);
+            } else {
+                $cb->($data);
+            }
+        },
+        sub {
+            my ($http, $err) = @_;
+            $log->error("Proxy request failed ($url): $err");
+            $cb->(undef);
+        },
+        { timeout => 30 }
+    )->get($url);
 }
 
 sub search {
-    my ($class, $cb, $query, $params) = @_;
-    my $body = { query => $query };
-    $body->{params} = $params if $params;
-    _call('search', $body, $cb);
+    my ($class, $cb, $query) = @_;
+    my $q = URI::Escape::uri_escape_utf8($query // '');
+    _get("/search?q=$q", $cb);
 }
 
-# Fetch YouTube Music's radio / "Up Next" recommendations for endless playback.
-# $seed_ref = { videoId => '...', playlistId => '...', limit => 25, radio => 1 }
+sub browse {
+    my ($class, $cb, $browse_id) = @_;
+    _get("/browse?browseId=" . URI::Escape::uri_escape_utf8($browse_id // ''), $cb);
+}
+
+sub browseHome       { $_[0]->_get_cb('/browse/home', $_[1]) }
+sub browseCharts     { $_[0]->_get_cb('/browse/charts', $_[1]) }
+sub browseNewReleases { $_[0]->_get_cb('/browse/new_releases', $_[1]) }
+sub browseMoods      { $_[0]->_get_cb('/browse/moods', $_[1]) }
+
+sub _get_cb {
+    my ($class, $path, $cb) = @_;
+    _get($path, $cb);
+}
+
+sub getSongInfo {
+    my ($class, $video_id, $cb) = @_;
+    _get("/song?videoId=$video_id", $cb);
+}
+
+sub prefetch {
+    my ($class, $video_id, $cb) = @_;
+    $cb ||= sub {};
+    _get("/prefetch/$video_id", $cb);
+}
+
+sub browseRadio {
+    my ($class, $video_id, $cb) = @_;
+    _get("/radio?videoId=$video_id", $cb);
+}
+
+# watch_playlist is used by Radio.pm and PlaylistProtocolHandler.pm.
+# Map it to the proxy's /radio (for radio seeds) or /browse (for playlists).
 sub watch_playlist {
     my ($class, $cb, $seed_ref) = @_;
-    _call('watch_playlist', $seed_ref || {}, $cb);
-}
-
-sub _call {
-    my ($method, $body, $cb) = @_;
-
-    my $cookie = $prefs->get('cookie') // '';
-    $cookie =~ s/[\r\n]//g;
-
-    my $script   = _api_script();
-    my $body_str = to_json($body);
-
-    $log->warn("API calling $method via Python script (cookie length: " . length($cookie) . ")");
-
-    # Tell the Python helper where the LMS plugin prefs dir is so it does not
-    # have to hardcode /var/lib/squeezeboxserver/prefs/plugin.
-    local $ENV{LMS_PREFS_DIR} = Plugins::YouTubeMusic::Utils::prefs_dir();
-
-    my @cmd = ('python3', $script, $method, $body_str, $cookie);
-
-    my $cv = AnyEvent::Util::run_cmd(
-        \@cmd,
-        '<',  '/dev/null',
-        '>',  \my $out,
-        '2>', \my $err,
-    );
-
-    $cv->cb(sub {
-        if ($err) {
-            $log->warn("ytm_api.py stderr: $err") if length($err) > 0;
-        }
-
-        if (!$out || !length($out)) {
-            $log->error("ytm_api.py returned empty output for $method");
-            $cb->({ error => 'empty response from API script' });
-            return;
-        }
-
-        my $result = eval { from_json($out) };
-        if ($@) {
-            $log->error("JSON parse error from ytm_api.py: $@");
-            $log->error("Raw output (200): " . substr($out, 0, 200));
-            $cb->({ error => "JSON parse error: $@" });
-            return;
-        }
-
-        if ($result->{error}) {
-            $log->error("ytm_api.py returned error: $result->{error}");
-            $cb->({ error => $result->{error} });
-            return;
-        }
-
-        $log->info("API $method succeeded, response size: " . length($out) . " bytes");
-        $cb->($result);
-    });
+    if ($seed_ref->{videoId}) {
+        _get("/radio?videoId=" . URI::Escape::uri_escape_utf8($seed_ref->{videoId}), $cb);
+    } elsif ($seed_ref->{playlistId}) {
+        _get("/browse?browseId=" . URI::Escape::uri_escape_utf8($seed_ref->{playlistId}), $cb);
+    } else {
+        $cb->([]);
+    }
 }
 
 1;
