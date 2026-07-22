@@ -873,12 +873,63 @@ def _call_ytm_api(method, body_dict):
 
 def stream_audio(video_id):
     """
-    Yield MP3 audio bytes for the given video ID by piping yt-dlp's stdout
-    directly into ffmpeg, avoiding any temp files. ffmpeg re-muxes into a
-    simple sequential MP3 stream (moov-atom positioning in raw MP4/WebM from
-    the YouTube CDN makes direct streaming unreliable on hardware decoders).
+    Yield MP3 audio bytes for the given video ID by extracting the direct CDN audio
+    URL via yt-dlp python module in-process (avoiding heavy CLI subprocess overhead),
+    then piping the URL directly into ffmpeg.
     """
     url = f"https://music.youtube.com/watch?v={video_id}"
+    audio_url = None
+    try:
+        import yt_dlp
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "extract_flat": False,
+            "format": "bestaudio/best",
+            "cache_dir": "/tmp/ytdlp_cache",
+            "socket_timeout": 10,
+            "retries": 2,
+            "extractor_retries": 2,
+            "js_runtimes": ["quickjs"],
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if info:
+                audio_url = info.get("url")
+    except Exception as e:
+        logging.warning("yt_dlp module extraction failed for %s: %s, falling back to CLI", video_id, e)
+
+    ffmpeg_bin = _find_ffmpeg()
+    if audio_url:
+        ffmpeg_cmd = [
+            ffmpeg_bin,
+            "-loglevel", "error",
+            "-i", audio_url,
+            "-vn",
+            "-map_metadata", "-1",
+            "-id3v2_version", "0",
+            "-write_id3v1", "0",
+            "-f", _AUDIO_FORMAT,
+            "-codec:a", _AUDIO_CODEC,
+        ]
+        if _AUDIO_CODEC not in ("flac", "pcm_s16le"):
+            ffmpeg_cmd += ["-b:a", "320k"]
+        ffmpeg_cmd.append("pipe:1")
+
+        logging.info("Streaming (direct CDN) videoId=%s", video_id)
+        p_ffmpeg = subprocess.Popen(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        try:
+            while True:
+                chunk = p_ffmpeg.stdout.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            p_ffmpeg.terminate()
+            p_ffmpeg.wait()
+        return
+
+    # Fallback to CLI subprocess if in-process module extraction failed
     ytdlp = _find_ytdlp()
     if not ytdlp:
         logging.error("yt-dlp binary not found!")
@@ -902,7 +953,7 @@ def stream_audio(video_id):
     ]
 
     ffmpeg_cmd = [
-        _find_ffmpeg(),
+        ffmpeg_bin,
         "-loglevel", "error",
         "-i", "pipe:0",
         "-vn",
@@ -916,33 +967,25 @@ def stream_audio(video_id):
         ffmpeg_cmd += ["-b:a", "320k"]
     ffmpeg_cmd.append("pipe:1")
 
-    logging.info("Streaming videoId=%s", video_id)
-
-    ytdlp_proc = subprocess.Popen(
-        ytdlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
-    )
-    ffmpeg_proc = subprocess.Popen(
-        ffmpeg_cmd,
-        stdin=ytdlp_proc.stdout,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
-    ytdlp_proc.stdout.close()
+    logging.info("Streaming (CLI fallback) videoId=%s", video_id)
+    p_ytdlp = subprocess.Popen(ytdlp_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    p_ffmpeg = subprocess.Popen(ffmpeg_cmd, stdin=p_ytdlp.stdout, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    p_ytdlp.stdout.close()
 
     try:
         while True:
-            chunk = ffmpeg_proc.stdout.read(65536)
+            chunk = p_ffmpeg.stdout.read(65536)
             if not chunk:
                 break
             yield chunk
     finally:
-        for proc in (ffmpeg_proc, ytdlp_proc):
+        for p in (p_ffmpeg, p_ytdlp):
             try:
-                proc.terminate()
-                proc.wait(timeout=2)
+                p.terminate()
+                p.wait(timeout=1)
             except Exception:
                 try:
-                    proc.kill()
+                    p.kill()
                 except Exception:
                     pass
 
