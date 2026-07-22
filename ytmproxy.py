@@ -263,11 +263,11 @@ def _single_col_sections(data):
     )
 
 _SEARCH_PARAMS = {
-    "songs":     "EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D",
-    "albums":    "EgWKAQIYAWoKEAkQChADEAQQBQ%3D%3D",
-    "artists":   "EgWKAQIgAWoKEAkQChADEAQQBQ%3D%3D",
-    "playlists": "EgeKAQQoAEABahAQDhAKEAMQBBAJEAUQCw%3D%3D",
-    "videos":    "EgWKAQIQAWoKEAkQChADEAQQBQ%3D%3D",
+    "songs":     "EgWKAQIIAWoKEAkQBRAKEAMQBA==",
+    "albums":    "EgWKAQIYAWoKEAkQChADEAQQBQ==",
+    "artists":   "EgWKAQIgAWoKEAkQChADEAQQBQ==",
+    "playlists": "EgeKAQQoAEABahAQDhAKEAMQBBAJEAUQCw==",
+    "videos":    "EgWKAQIQAWoKEAkQChADEAQQBQ==",
 }
 
 def search(query, type_filter="songs"):
