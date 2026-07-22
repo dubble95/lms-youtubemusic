@@ -88,7 +88,7 @@ sub new {
 # Extract video ID from ytmusic:// URL
 sub _extract_video_id {
     my ($url) = @_;
-    my ($vid) = $url =~ m{ytmusic://([A-Za-z0-9_\-]+)};
+    my ($vid) = $url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
     return $vid;
 }
 
@@ -145,7 +145,7 @@ sub _prefetch_with_client {
     return unless $next_track;
 
     my $next_url = eval { $next_track->url } // '';
-    my ($next_vid) = $next_url =~ m{ytmusic://([A-Za-z0-9_\-]+)};
+    my ($next_vid) = $next_url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
     return unless $next_vid;
 
     $log->info("Prefetching next track: $next_vid");
@@ -200,7 +200,7 @@ sub _fetch_metadata {
 sub getMetadataFor {
     my ($class, $client, $url) = @_;
 
-    my ($vid) = $url =~ m{ytmusic://([A-Za-z0-9_\-]+)};
+    my ($vid) = $url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
     return {} unless $vid;
 
     my $cached = $_metadata_cache{$vid};
