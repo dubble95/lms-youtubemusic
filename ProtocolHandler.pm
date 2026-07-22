@@ -173,9 +173,13 @@ sub primeMetadata {
         my $t_url = "ytmusic://$video_id";
         my $track = Slim::Schema->objectForUrl($t_url) || Slim::Schema->updateOrCreate({ url => $t_url });
         if ($track) {
-            $track->title($info->{title})        if $info->{title};
-            $track->secs($info->{duration})      if $info->{duration};
-            $track->coverurl($info->{thumbnail} || $info->{cover}) if ($info->{thumbnail} || $info->{cover});
+            my $cover = $info->{thumbnail} || $info->{cover};
+            $track->title($info->{title})   if $info->{title};
+            $track->secs($info->{duration}) if $info->{duration};
+            if ($cover) {
+                eval { $track->cover($cover); };
+                eval { $track->coverurl($cover); };
+            }
             $track->update();
         }
     };
@@ -188,19 +192,25 @@ sub _fetch_metadata {
         my $info = shift;
         return unless $info && ref $info eq 'HASH';
 
+        my $cover = $info->{thumbnail} || $info->{cover} || '';
         $_metadata_cache{$video_id} = {
-            title    => $info->{title}     || '',
-            artist   => $info->{artist}    || '',
-            album    => $info->{album}     || '',
-            duration => $info->{duration}  || 0,
-            cover    => $info->{thumbnail} || $info->{cover} || '',
+            title    => $info->{title}    || '',
+            artist   => $info->{artist}   || '',
+            album    => $info->{album}    || '',
+            duration => $info->{duration} || 0,
+            cover    => $cover,
         };
 
         my $track = $song->currentTrack();
-        $track->title($info->{title})        if $info->{title};
-        $track->secs($info->{duration})      if $info->{duration};
-        $track->coverurl($info->{thumbnail}) if $info->{thumbnail};
-        $track->update();
+        if ($track) {
+            $track->title($info->{title})   if $info->{title};
+            $track->secs($info->{duration}) if $info->{duration};
+            if ($cover) {
+                eval { $track->cover($cover); };
+                eval { $track->coverurl($cover); };
+            }
+            $track->update();
+        }
 
         Slim::Control::Request::notifyFromArray(undef, ['newmetadata']);
         $log->info("Metadata updated for $video_id: " . ($info->{title} // '?'));
@@ -225,18 +235,44 @@ sub getMetadataFor {
         }
     }
 
+    my $cover = ($cached && $cached->{cover}) ? $cached->{cover}
+                : Plugins::YouTubeMusic::Plugin->_pluginDataFor('icon');
+
     my %meta = (
-        title   => ($cached && $cached->{title})  ? $cached->{title}  : "YouTube Music - $vid",
-        artist  => ($cached && $cached->{artist}) ? $cached->{artist} : '',
-        album   => ($cached && $cached->{album})  ? $cached->{album}  : 'YouTube Music',
-        cover   => ($cached && $cached->{cover})  ? $cached->{cover}
-                    : Plugins::YouTubeMusic::Plugin->_pluginDataFor('icon'),
-        type    => 'YouTube Music',
-        bitrate => '320k CBR',
-        duration => ($cached && $cached->{duration}) ? $cached->{duration} : undef,
+        title       => ($cached && $cached->{title})  ? $cached->{title}  : "YouTube Music - $vid",
+        artist      => ($cached && $cached->{artist}) ? $cached->{artist} : '',
+        album       => ($cached && $cached->{album})  ? $cached->{album}  : 'YouTube Music',
+        cover       => $cover,
+        icon        => $cover,
+        coverurl    => $cover,
+        artwork_url => $cover,
+        type        => 'YouTube Music',
+        bitrate     => '320k CBR',
+        duration    => ($cached && $cached->{duration}) ? $cached->{duration} : undef,
     );
 
     return \%meta;
+}
+
+sub getCoverArt {
+    my ($class, $client, $url) = @_;
+
+    my ($vid) = $url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
+    return undef unless $vid;
+
+    my $cached = $_metadata_cache{$vid};
+    if ($cached && $cached->{cover}) {
+        return $cached->{cover};
+    }
+
+    require Slim::Utils::Cache;
+    my $cache = Slim::Utils::Cache->new();
+    my $disk_cached = $cache->get("ytm:meta:ytmusic://$vid");
+    if ($disk_cached && ref($disk_cached) eq 'HASH' && $disk_cached->{cover}) {
+        return $disk_cached->{cover};
+    }
+
+    return undef;
 }
 
 sub getIcon {
