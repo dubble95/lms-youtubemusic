@@ -177,8 +177,10 @@ sub primeMetadata {
             $track->title($info->{title})   if $info->{title};
             $track->secs($info->{duration}) if $info->{duration};
             if ($cover) {
-                eval { $track->cover($cover); };
-                eval { $track->coverurl($cover); };
+                my $formatted = _format_cover_url($cover);
+                eval { $track->cover($formatted); };
+                eval { $track->coverurl($formatted); };
+                eval { $track->coverart(1); };
             }
             $track->update();
         }
@@ -206,8 +208,10 @@ sub _fetch_metadata {
             $track->title($info->{title})   if $info->{title};
             $track->secs($info->{duration}) if $info->{duration};
             if ($cover) {
-                eval { $track->cover($cover); };
-                eval { $track->coverurl($cover); };
+                my $formatted = _format_cover_url($cover);
+                eval { $track->cover($formatted); };
+                eval { $track->coverurl($formatted); };
+                eval { $track->coverart(1); };
             }
             $track->update();
         }
@@ -258,6 +262,7 @@ sub getMetadataFor {
         icon        => $cover,
         coverurl    => $cover,
         artwork_url => $cover,
+        coverart    => $cover ? 1 : 0,
         type        => 'YouTube Music',
         bitrate     => '320k CBR',
         duration    => ($cached && $cached->{duration}) ? $cached->{duration} : undef,
