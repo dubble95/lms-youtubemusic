@@ -137,19 +137,22 @@ sub _prefetch_with_client {
     my $cur_index = eval { Slim::Player::Source::playingSongIndex($client) };
     return unless defined $cur_index;
 
-    my $next_index = $cur_index + 1;
-    my $count      = eval { Slim::Player::Playlist::count($client) } || 0;
-    return unless $next_index < $count;
+    my $count = eval { Slim::Player::Playlist::count($client) } || 0;
 
-    my $next_track = eval { Slim::Player::Playlist::track($client, $next_index) };
-    return unless $next_track;
+    for my $offset (1..3) {
+        my $next_index = $cur_index + $offset;
+        last if $next_index >= $count;
 
-    my $next_url = eval { $next_track->url } // '';
-    my ($next_vid) = $next_url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
-    return unless $next_vid;
+        my $next_track = eval { Slim::Player::Playlist::track($client, $next_index) };
+        next unless $next_track;
 
-    $log->info("Prefetching next track: $next_vid");
-    Plugins::YouTubeMusic::API->prefetch($next_vid, sub {});
+        my $next_url = eval { $next_track->url } // '';
+        my ($next_vid) = $next_url =~ m{ytmusic:(?://)?([A-Za-z0-9_\-]+)};
+        next unless $next_vid;
+
+        $log->info("Prefetching upcoming track (+$offset): $next_vid");
+        Plugins::YouTubeMusic::API->prefetch($next_vid, sub {});
+    }
 }
 
 # ── Metadata ──────────────────────────────────────────────────────────────────

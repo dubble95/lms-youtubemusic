@@ -95,6 +95,16 @@ sub explodePlaylist {
             }, 86400);
         }
 
+        # Auto-prefetch the first 3 tracks of the expanded playlist in the background
+        for my $i (0..2) {
+            last if $i >= scalar(@$tracks);
+            my $vid = $tracks->[$i]->{videoId};
+            if ($vid) {
+                $log->info("Auto-prefetching initial playlist track ($i): $vid");
+                Plugins::YouTubeMusic::API->prefetch($vid, sub {});
+            }
+        }
+
         $cb->(\@track_urls);
     }, { playlistId => $browse_id, limit => 200, radio => 0 });
 }

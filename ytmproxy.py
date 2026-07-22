@@ -891,6 +891,7 @@ def stream_audio(video_id):
         "--socket-timeout", "10",
         "--retries", "2",
         "--extractor-retries", "2",
+        "--cache-dir", "/tmp/ytdlp_cache",
         "--no-part",
         "-f", "bestaudio/best",
         "--js-runtimes", "quickjs",
