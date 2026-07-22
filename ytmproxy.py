@@ -7,6 +7,8 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+import warnings
+warnings.filterwarnings("ignore")
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
