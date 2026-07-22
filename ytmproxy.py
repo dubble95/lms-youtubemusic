@@ -848,6 +848,22 @@ def _find_ytdlp():
     return None
 
 
+def _call_ytm_api(method, body_dict):
+    ytm_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ytm_api.py")
+    if not os.path.isfile(ytm_script):
+        return None
+    try:
+        proc = subprocess.run(
+            [sys.executable, ytm_script, method, json.dumps(body_dict)],
+            capture_output=True, text=True, timeout=20
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            return json.loads(proc.stdout)
+    except Exception as e:
+        logging.warning("ytm_api call failed for %s: %s", method, e)
+    return None
+
+
 def stream_audio(video_id):
     """
     Yield MP3 audio bytes for the given video ID by piping yt-dlp's stdout
@@ -958,7 +974,13 @@ class _Handler(BaseHTTPRequestHandler):
                     return self._error("Missing q parameter", 400)
                 self._send_json(search(q, p("type", "songs")))
             elif path == "/browse":
-                bid = p("browseId")
+                bid    = p("browseId")
+                params = p("params", "")
+                if bid:
+                    res = _call_ytm_api("browse", {"browseId": bid, "params": params})
+                    if res and (not isinstance(res, dict) or "error" not in res):
+                        self._send_json(res)
+                        return
                 if not bid or bid == "FEmusic_home":
                     self._send_json(browse_home())
                 elif bid in ("FEmusic_explore", "FEmusic_charts"):
