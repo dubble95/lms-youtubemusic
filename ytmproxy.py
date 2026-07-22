@@ -1106,16 +1106,11 @@ class _Handler(BaseHTTPRequestHandler):
 
                 self.send_response(200)
                 self.send_header("Content-Type", _AUDIO_MIME)
-                self.send_header("Transfer-Encoding", "chunked")
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 try:
                     for chunk in stream_audio(vid):
-                        size_hdr = ("%x\r\n" % len(chunk)).encode()
-                        self.wfile.write(size_hdr)
                         self.wfile.write(chunk)
-                        self.wfile.write(b"\r\n")
-                    self.wfile.write(b"0\r\n\r\n")
                 except (BrokenPipeError, ConnectionResetError):
                     logging.info("Client disconnected during stream for %s", vid)
                 except Exception:
