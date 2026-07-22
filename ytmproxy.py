@@ -268,16 +268,17 @@ _SEARCH_PARAMS = {
     "artists":   "EgWKAQIgAWoKEAkQChADEAQQBQ==",
     "playlists": "EgeKAQQoAEABahAQDhAKEAMQBBAJEAUQCw==",
     "videos":    "EgWKAQIQAWoKEAkQChADEAQQBQ==",
-}
-
-def search(query, type_filter="songs"):
+}def search(query, type_filter="songs"):
     cache_key = f"search:{type_filter}:{query}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
 
-    params = _SEARCH_PARAMS.get(type_filter, _SEARCH_PARAMS["songs"])
-    data   = _post("search", {"query": query, "params": params})
+    params = _SEARCH_PARAMS.get(type_filter) if (type_filter and type_filter in _SEARCH_PARAMS) else None
+    body   = {"query": query}
+    if params:
+        body["params"] = params
+    data   = _post("search", body)
     tabs = (
         data.get("contents", {})
             .get("tabbedSearchResultsRenderer", {})
@@ -348,6 +349,7 @@ def search(query, type_filter="songs"):
     _cache_set(cache_key, results)
     return results
 
+
 def browse_home():
     cached = _cache_get("home")
     if cached:
@@ -368,12 +370,15 @@ def browse_home():
 
     if not result:
         # Fallback for regional / unauthenticated accounts: construct rich Home sections
-        top_hits = search("Top Hits", "songs")
+        top_hits = search("Top Hits", None)
         if top_hits:
             result.append({"title": "Top Hits", "items": top_hits})
-        new_releases = browse_new_releases()
-        if new_releases:
-            result.extend(new_releases)
+        kpop_hits = search("K-Pop Hits", None)
+        if kpop_hits:
+            result.append({"title": "K-Pop Hits", "items": kpop_hits})
+        pop_hits = search("Pop Hits", None)
+        if pop_hits:
+            result.append({"title": "Pop Hits", "items": pop_hits})
 
     if result:
         _cache_set("home", result)
