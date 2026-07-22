@@ -398,9 +398,15 @@ def browse_home():
                 item["videoId"] = watch_ep["videoId"]
                 item["url"]     = f"ytm://{watch_ep['videoId']}"
                 item["type"]    = "song"
-            items.append(item)
-        if items:
-            result.append({"title": title or "Featured", "items": items})
+    if not result:
+        # Fallback for regional / unauthenticated accounts: construct rich Home sections
+        top_hits = search("Top Hits", "songs")
+        if top_hits:
+            result.append({"title": "Top Hits", "items": top_hits})
+        new_releases = browse_new_releases()
+        if new_releases:
+            result.extend(new_releases)
+
     _cache_set("home", result)
     return result
 
@@ -975,6 +981,20 @@ class _Handler(BaseHTTPRequestHandler):
                 if not q:
                     return self._error("Missing q parameter", 400)
                 self._send_json(search(q, p("type", "songs")))
+            elif path == "/browse":
+                bid = p("browseId")
+                if not bid or bid == "FEmusic_home":
+                    self._send_json(browse_home())
+                elif bid in ("FEmusic_explore", "FEmusic_charts"):
+                    self._send_json(browse_charts())
+                elif bid in ("FEmusic_new_releases", "FEmusic_new_releases_albums"):
+                    self._send_json(browse_new_releases())
+                elif bid in ("FEmusic_moods", "FEmusic_moods_and_genres"):
+                    self._send_json(browse_moods())
+                elif bid.startswith("UC"):
+                    self._send_json(browse_artist(bid))
+                else:
+                    self._send_json(browse_playlist(bid))
             elif path == "/browse/home":
                 self._send_json(browse_home())
             elif path == "/browse/charts":

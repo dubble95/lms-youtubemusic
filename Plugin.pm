@@ -22,15 +22,17 @@ my $PROXY_PID;
 sub initPlugin {
     my $class = shift;
 
-    # Register the log category at initPlugin time — doing it at BEGIN time
-    # can fail because LMS may not have initialised its logging system yet.
-    $log = Slim::Utils::Log::addLogCategory({
+    # Register the log category — use -> (method) syntax like schmij97.
+    $log = Slim::Utils::Log->addLogCategory({
         'category'     => 'plugin.youtubemusic',
         'defaultLevel' => 'WARN',
         'description'  => 'PLUGIN_YOUTUBEMUSIC',
-    }) || do {
-        # Fallback: use the generic logger
-        $log = Slim::Utils::Log->logger('plugin.youtubemusic');
+    });
+
+    # Fallback if addLogCategory returned undef or died
+    $log ||= do {
+        eval { Slim::Utils::Log->addLogCategory('plugin.youtubemusic') };
+        Slim::Utils::Log->logger('plugin.youtubemusic');
     };
 
     $log->warn('YouTube Music plugin loading.');
@@ -55,9 +57,8 @@ sub initPlugin {
 
     $log->warn('YouTube Music plugin loaded.');
 
-    # Radio auto-queue — needs API format migration for proxy-based API.
-    # TODO: re-enable after updating Radio.pm to use proxy response format.
-    # Plugins::YouTubeMusic::Radio->init();
+    # Start the endless-radio auto-queue (subscribes to playlist notifications).
+    Plugins::YouTubeMusic::Radio->init();
 }
 
 sub shutdownPlugin {
@@ -228,7 +229,9 @@ sub _parseInnerTube {
 
     # Extract the top-level contents array from various response structures
     my $contents;
-    if ($result->{contents} && $result->{contents}->{singleColumnBrowseResultsRenderer}) {
+    if (ref($result) eq 'ARRAY') {
+        $contents = $result;
+    } elsif ($result->{contents} && $result->{contents}->{singleColumnBrowseResultsRenderer}) {
         # Browse response (FEmusic_home etc)
         my $tabs = $result->{contents}->{singleColumnBrowseResultsRenderer}->{tabs};
         if ($tabs && @$tabs) {
@@ -263,6 +266,34 @@ sub _parseInnerTube {
     }
 
     for my $section (@$contents) {
+        # Handle structured section list from ytmproxy.py ({ title => '...', items => [...] })
+        if (ref($section) eq 'HASH' && $section->{items} && ref($section->{items}) eq 'ARRAY') {
+            my $shelfTitle = $section->{title} || 'Section';
+            push @items, { name => "--- $shelfTitle ---", type => 'text' };
+            for my $item (@{$section->{items}}) {
+                if (!ref($item) || ref($item) ne 'HASH') {
+                    next;
+                }
+                if ($item->{type} && $item->{type} eq 'song' || $item->{videoId}) {
+                    push @items, {
+                        name  => $item->{title} . ($item->{subtitle} ? " (" . $item->{subtitle} . ")" : ""),
+                        type  => 'audio',
+                        url   => "ytmusic://" . $item->{videoId},
+                        image => $item->{thumbnail},
+                    };
+                } elsif ($item->{type} && $item->{type} eq 'mood_category' || $item->{params}) {
+                    push @items, {
+                        name => $item->{title},
+                        type => 'link',
+                        url  => \&handleBrowse,
+                        passthrough => [ { browseId => $item->{browseId}, params => $item->{params} } ],
+                    };
+                } elsif ($item->{browseId}) {
+                    push @items, _playlist_item($item->{title}, $item->{subtitle}, $item->{browseId}, $item->{thumbnail});
+                }
+            }
+            next;
+        }
         # musicCardShelfRenderer: top search result card (e.g. "best match")
         if ($section->{musicCardShelfRenderer}) {
             my $card = $section->{musicCardShelfRenderer};
