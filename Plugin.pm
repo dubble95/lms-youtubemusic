@@ -306,7 +306,8 @@ sub _parseInnerTube {
             for my $c (@{$section->{itemSectionRenderer}->{contents}}) {
                 if ($c->{messageRenderer} && $c->{messageRenderer}->{text}) {
                     my $msg = _getText($c->{messageRenderer}->{text});
-                    push @items, { name => "⚠️ $msg", type => 'text' };
+                    push @items, { name => "[Notice] $msg", type => 'text' };
+                    push @items, { name => "[Info] YouTube Music session cookie expired. Please re-export ytm_cookies.txt in LMS Settings.", type => 'text' };
                 }
             }
             next;
