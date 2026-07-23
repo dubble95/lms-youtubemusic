@@ -878,19 +878,21 @@ def _find_ytdlp():
     return None
 
 
+try:
+    import ytm_api
+except ImportError:
+    ytm_api = None
+
 def _call_ytm_api(method, body_dict):
-    ytm_script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ytm_api.py")
-    if not os.path.isfile(ytm_script):
-        return None
-    try:
-        proc = subprocess.run(
-            [sys.executable, ytm_script, method, json.dumps(body_dict)],
-            capture_output=True, text=True, timeout=20
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return json.loads(proc.stdout)
-    except Exception as e:
-        logging.warning("ytm_api call failed for %s: %s", method, e)
+    if ytm_api is not None:
+        try:
+            func = getattr(ytm_api, method, None)
+            if callable(func):
+                return func(body_dict)
+            elif hasattr(ytm_api, "direct_api_call"):
+                return ytm_api.direct_api_call(method, body_dict)
+        except Exception as e:
+            logging.warning("In-process ytm_api call failed for %s: %s", method, e)
     return None
 
 
