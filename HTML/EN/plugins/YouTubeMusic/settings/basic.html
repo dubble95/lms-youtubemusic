@@ -3,10 +3,8 @@
 [% WRAPPER settingSection %]
 
     [% WRAPPER settingGroup title="AUTH_STATUS" desc="AUTH_STATUS_DESC" %]
-        [% IF cookie_configured == 1 %]
-            <b><font color="green">&#10003; Connected (Active Session)</font></b>
-        [% ELSIF cookie_configured == 2 %]
-            <b><font color="orange">&#9888; Cookie Expired (Please re-export ytm_cookies.txt)</font></b>
+        [% IF cookie_configured %]
+            <b><font color="green">&#10003; Connected (cookie configured)</font></b>
         [% ELSE %]
             <b><font color="red">&#10007; Disconnected (No cookie configured)</font></b>
         [% END %]

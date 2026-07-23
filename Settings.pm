@@ -56,32 +56,11 @@ sub handler {
     }
 
     # Surface current auth state to the template so the UI can show
-    # "Connected (Active Session)" vs "Cookie Expired" vs "Disconnected".
+    # "Connected" vs "Not authenticated".
     my $current_cookie = $prefs->get('cookie');
-    if ($current_cookie && length($current_cookie) > 50) {
-        my $is_valid = _check_cookie_validity();
-        $params->{cookie_configured} = ($is_valid == 1) ? 1 : 2;
-    } else {
-        $params->{cookie_configured} = 0;
-    }
+    $params->{cookie_configured} = ($current_cookie && length($current_cookie) > 50) ? 1 : 0;
 
     $callback->($client, $params, $class->SUPER::handler($client, $params), @args);
-}
-
-sub _check_cookie_validity {
-    my $plugin_info = Slim::Utils::PluginManager->allPlugins->{'YouTubeMusic'};
-    my $script = $plugin_info && $plugin_info->{basedir}
-        ? File::Spec->catfile($plugin_info->{basedir}, 'ytm_check_auth.py')
-        : '/var/lib/squeezeboxserver/Plugins/YouTubeMusic/ytm_check_auth.py';
-
-    return 0 unless -f $script;
-
-    my $python = _find_python() || 'python3';
-    my $res = `$python "$script" 2>/dev/null`;
-    if ($res && $res =~ /^VALID/) {
-        return 1;
-    }
-    return 0;
 }
 
 # Normalize either a Netscape cookies.txt blob or a raw Cookie header into a
