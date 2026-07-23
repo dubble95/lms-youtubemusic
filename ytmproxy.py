@@ -907,22 +907,22 @@ def stream_audio(video_id):
     if yt_dlp is not None:
         try:
             ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "extract_flat": False,
-            "format": "bestaudio/best",
-            "cache_dir": "/tmp/ytdlp_cache",
-            "socket_timeout": 10,
-            "retries": 2,
-            "extractor_retries": 2,
-            "js_runtimes": ["quickjs"],
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info:
-                audio_url = info.get("url")
-    except Exception as e:
-        logging.warning("yt_dlp module extraction failed for %s: %s, falling back to CLI", video_id, e)
+                "quiet": True,
+                "no_warnings": True,
+                "extract_flat": False,
+                "format": "bestaudio/best",
+                "cache_dir": "/tmp/ytdlp_cache",
+                "socket_timeout": 10,
+                "retries": 2,
+                "extractor_retries": 2,
+                "js_runtimes": ["quickjs"],
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    audio_url = info.get("url")
+        except Exception as e:
+            logging.warning("yt_dlp module extraction failed for %s: %s, falling back to CLI", video_id, e)
 
     ffmpeg_bin = _find_ffmpeg()
     if audio_url:
