@@ -304,9 +304,8 @@ sub _parseInnerTube {
         if ($section->{itemSectionRenderer} && $section->{itemSectionRenderer}->{contents}) {
             for my $c (@{$section->{itemSectionRenderer}->{contents}}) {
                 if ($c->{messageRenderer} && $c->{messageRenderer}->{text}) {
-                    my $msg = _getText($c->{messageRenderer}->{text});
-                    push @items, { name => "[Notice] $msg", type => 'text' };
-                    push @items, { name => "[Info] YouTube Music session cookie expired. Please re-export ytm_cookies.txt in LMS Settings.", type => 'text' };
+                    push @items, { name => "[Cookie Session Expired] YouTube Music session cookie has expired.", type => 'text' };
+                    push @items, { name => "[Action Required] Re-export ytm_cookies.txt (Tip: Exporting from Incognito Mode keeps cookies valid for 1-2 years without expiring).", type => 'text' };
                 }
             }
             next;
