@@ -244,12 +244,11 @@ sub handleBrowse {
             }
             if ($browseId eq 'FEmusic_home' && $has_interactive == 0) {
                 push @$items, (
-                    { name => "--- Quick Access ---", type => 'text' },
-                    _playlist_item("My Supermix", "Personalized Radio", "VLRDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY", ""),
+                    { name => "--- Public Music Browsing ---", type => 'text' },
                     { name => "Explore", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_explore' }] },
                     { name => "Charts", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_charts' }] },
                     { name => "New Releases", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_new_releases_albums' }] },
-                    { name => "Library", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_library_library' }] },
+                    { name => "Search", type => 'search', url => \&handleSearch },
                 );
             }
         }
