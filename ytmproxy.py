@@ -5,6 +5,7 @@ import logging
 import shutil
 import subprocess
 import sys
+import hashlib
 import urllib.error
 import urllib.request
 import warnings
