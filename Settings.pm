@@ -71,20 +71,14 @@ sub handler {
 sub _check_cookie_validity {
     my $plugin_info = Slim::Utils::PluginManager->allPlugins->{'YouTubeMusic'};
     my $script = $plugin_info && $plugin_info->{basedir}
-        ? $plugin_info->{basedir} . '/ytm_check_auth.py'
-        : '/usr/share/squeezeboxserver/Plugins/YouTubeMusic/ytm_check_auth.py';
+        ? File::Spec->catfile($plugin_info->{basedir}, 'ytm_check_auth.py')
+        : '/var/lib/squeezeboxserver/Plugins/YouTubeMusic/ytm_check_auth.py';
 
-    return 1 unless -f $script;
+    return 0 unless -f $script;
 
-    my @cmd = ('python3', $script);
-    my $cv = AnyEvent::Util::run_cmd(
-        \@cmd,
-        '<', '/dev/null',
-        '>', \my $out,
-        '2>', \my $err,
-    );
-    $cv->recv;
-    if ($out && $out =~ /VALID/) {
+    my $python = _find_python() || 'python3';
+    my $res = `$python "$script" 2>/dev/null`;
+    if ($res && $res =~ /VALID/) {
         return 1;
     }
     return 0;
