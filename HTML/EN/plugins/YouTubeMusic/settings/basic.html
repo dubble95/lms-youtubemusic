@@ -4,9 +4,12 @@
 
     [% WRAPPER settingGroup title="AUTH_STATUS" desc="AUTH_STATUS_DESC" %]
         [% IF cookie_configured %]
-            <b><font color="green">&#10003; Connected (cookie configured)</font></b>
+            <b><font color="green">&#10003; Cookie File Configured</font></b>
+            <div class="prefDesc" style="margin-top:4px;">
+                Note: Google session tokens expire periodically. If Home shows region/auth notices, please export and paste fresh cookies below.
+            </div>
         [% ELSE %]
-            <b><font color="red">&#10007; Disconnected (No cookie configured)</font></b>
+            <b><font color="red">&#10007; No Cookie Configured</font></b>
         [% END %]
     [% END %]
 
