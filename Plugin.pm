@@ -231,14 +231,27 @@ sub handleBrowse {
 
         $log->warn("handleBrowse returning " . scalar(@$items) . " items");
 
-        if ($browseId && ref($items) eq 'ARRAY' && @$items) {
-            my $play_url = "ytmplaylist://$browseId";
-            unshift @$items, {
-                name  => "▶ Play All",
-                type  => 'audio',
-                url   => $play_url,
-                play  => $play_url,
-            };
+        if ($browseId && ref($items) eq 'ARRAY') {
+            my $has_interactive = scalar(grep { $_->{type} && $_->{type} ne 'text' } @$items);
+            if ($has_interactive > 0) {
+                my $play_url = "ytmplaylist://$browseId";
+                unshift @$items, {
+                    name  => "▶ Play All",
+                    type  => 'audio',
+                    url   => $play_url,
+                    play  => $play_url,
+                };
+            }
+            if ($browseId eq 'FEmusic_home' && $has_interactive == 0) {
+                push @$items, (
+                    { name => "--- Quick Access ---", type => 'text' },
+                    _playlist_item("My Supermix", "Personalized Radio", "VLRDTMAK5uy_kset8DisdE7LSD4TNjEVvrKRTmG7a56sY", ""),
+                    { name => "Explore", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_explore' }] },
+                    { name => "Charts", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_charts' }] },
+                    { name => "New Releases", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_new_releases_albums' }] },
+                    { name => "Library", type => 'link', url => \&handleBrowse, passthrough => [{ browseId => 'FEmusic_library_library' }] },
+                );
+            }
         }
 
         $cb->({ items => $items });
@@ -288,6 +301,17 @@ sub _parseInnerTube {
     }
 
     for my $section (@$contents) {
+        # itemSectionRenderer: contains messageRenderer (e.g. Premium required or region notice)
+        if ($section->{itemSectionRenderer} && $section->{itemSectionRenderer}->{contents}) {
+            for my $c (@{$section->{itemSectionRenderer}->{contents}}) {
+                if ($c->{messageRenderer} && $c->{messageRenderer}->{text}) {
+                    my $msg = _getText($c->{messageRenderer}->{text});
+                    push @items, { name => "⚠️ $msg", type => 'text' };
+                }
+            }
+            next;
+        }
+
         # Handle structured section list from ytmproxy.py ({ title => '...', items => [...] })
         if (ref($section) eq 'HASH' && $section->{items} && ref($section->{items}) eq 'ARRAY') {
             my $shelfTitle = $section->{title} || 'Section';

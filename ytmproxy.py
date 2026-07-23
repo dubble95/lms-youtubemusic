@@ -73,6 +73,7 @@ if _YTM_COOKIE:
 
 import time
 import threading
+import hashlib
 
 _CACHE = {}
 _CACHE_TTL = 120  # seconds
@@ -91,10 +92,27 @@ def _cache_set(key, value):
             _CACHE.pop(k, None)
 
 
+def _get_auth_headers():
+    headers = dict(_HEADERS)
+    if _YTM_COOKIE:
+        sapisid = None
+        for c in _YTM_COOKIE.split("; "):
+            if c.startswith("SAPISID=") or c.startswith("__Secure-3PAPISID="):
+                sapisid = c.split("=", 1)[1]
+                break
+        if sapisid:
+            now = str(int(time.time()))
+            inp = f"{now} {sapisid} https://music.youtube.com"
+            sapisid_hash = hashlib.sha1(inp.encode("utf-8")).hexdigest()
+            headers["Authorization"] = f"SAPISIDHASH {now}_{sapisid_hash}"
+    return headers
+
+
 def _post(endpoint, body):
     url     = YTM_BASE + endpoint + "?prettyPrint=false"
     payload = json.dumps({"context": {"client": _CLIENT}, **body}).encode()
-    req     = urllib.request.Request(url, data=payload, headers=_HEADERS, method="POST")
+    headers = _get_auth_headers()
+    req     = urllib.request.Request(url, data=payload, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=20) as resp:
         return json.loads(resp.read().decode())
 
