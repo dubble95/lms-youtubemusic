@@ -10,6 +10,10 @@ import urllib.error
 import urllib.request
 import warnings
 warnings.filterwarnings("ignore")
+try:
+    import yt_dlp
+except ImportError:
+    yt_dlp = None
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -898,9 +902,9 @@ def stream_audio(video_id):
     """
     url = f"https://music.youtube.com/watch?v={video_id}"
     audio_url = None
-    try:
-        import yt_dlp
-        ydl_opts = {
+    if yt_dlp is not None:
+        try:
+            ydl_opts = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,
