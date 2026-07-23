@@ -78,7 +78,7 @@ sub _check_cookie_validity {
 
     my $python = _find_python() || 'python3';
     my $res = `$python "$script" 2>/dev/null`;
-    if ($res && $res =~ /VALID/) {
+    if ($res && $res =~ /^VALID/) {
         return 1;
     }
     return 0;
